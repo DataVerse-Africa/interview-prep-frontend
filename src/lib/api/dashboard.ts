@@ -13,33 +13,40 @@ export interface SessionSummary {
 }
 
 export const dashboardApi = {
-  getUserSessions: async (userId: string): Promise<SessionSummary[]> => {
-    return apiClient.get<SessionSummary[]>(`/api/dashboard/users/${userId}/sessions`);
+  // GET /api/sessions - user_id from JWT (updated endpoint)
+  getUserSessions: async (): Promise<SessionSummary[]> => {
+    // New sessions endpoint returns { sessions: [], total: number }
+    const response = await apiClient.get<{ sessions: SessionSummary[]; total: number }>(`/api/sessions`);
+    return response.sessions;
   },
 
-  getSessionDetails: async (userId: string, sessionId: string): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/users/${userId}/sessions/${sessionId}`);
+  // GET /api/sessions/{session_id} - user_id from JWT (updated endpoint)
+  getSessionDetails: async (sessionId: string): Promise<any> => {
+    return apiClient.get<any>(`/api/sessions/${sessionId}`);
   },
 
-  getUserPerformance: async (userId: string): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/users/${userId}/performance`);
+  // GET /api/dashboard/performance - user_id from JWT
+  getUserPerformance: async (): Promise<any> => {
+    return apiClient.get<any>(`/api/dashboard/performance`);
   },
 
-  getUserProgress: async (userId: string): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/users/${userId}/progress`);
+  // GET /api/dashboard/progress - user_id from JWT
+  getUserProgress: async (): Promise<any> => {
+    return apiClient.get<any>(`/api/dashboard/progress`);
   },
 
-  getUserInsights: async (userId: string): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/users/${userId}/insights`);
+  // GET /api/dashboard/insights - user_id from JWT
+  getUserInsights: async (): Promise<any> => {
+    return apiClient.get<any>(`/api/dashboard/insights`);
   },
 
-  getTimeAnalytics: async (userId: string): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/users/${userId}/time-analytics`);
+  // GET /api/dashboard/time-analytics - user_id from JWT
+  getTimeAnalytics: async (): Promise<any> => {
+    return apiClient.get<any>(`/api/dashboard/time-analytics`);
   },
 
-  getTopicAnalytics: async (userId: string, topicName: string): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/users/${userId}/topic-analytics/${topicName}`);
+  // GET /api/dashboard/topic-analytics/{topic_name} - user_id from JWT
+  getTopicAnalytics: async (topicName: string): Promise<any> => {
+    return apiClient.get<any>(`/api/dashboard/topic-analytics/${topicName}`);
   },
 };
-
-

@@ -45,64 +45,62 @@ export interface DifficultyBucketEvaluationOut {
 }
 
 export const evaluationsApi = {
+  // POST /api/evaluations/sessions/{session_id}/days/{day_number}/questions/{question_id}/evaluate - user_id from JWT
   evaluateAnswer: async (
-    userId: string,
     sessionId: string,
     dayNumber: number,
     questionId: string,
     payload: EvaluationSubmission
   ): Promise<EvaluationResultOut> => {
     return apiClient.post<EvaluationResultOut>(
-      `/api/evaluations/users/${userId}/sessions/${sessionId}/days/${dayNumber}/questions/${questionId}/evaluate`,
+      `/api/evaluations/sessions/${sessionId}/days/${dayNumber}/questions/${questionId}/evaluate`,
       payload
     );
   },
 
+  // GET /api/evaluations/sessions/{session_id}/days/{day_number}/questions/{question_id}/evaluation - user_id from JWT
   getEvaluation: async (
-    userId: string,
     sessionId: string,
     dayNumber: number,
     questionId: string
   ): Promise<EvaluationResultOut> => {
     return apiClient.get<EvaluationResultOut>(
-      `/api/evaluations/users/${userId}/sessions/${sessionId}/days/${dayNumber}/questions/${questionId}/evaluation`
+      `/api/evaluations/sessions/${sessionId}/days/${dayNumber}/questions/${questionId}/evaluation`
     );
   },
 
+  // POST /api/evaluations/sessions/{session_id}/days/{day_number}/questions/{question_id}/reevaluate - user_id from JWT
   reevaluateAnswer: async (
-    userId: string,
     sessionId: string,
     dayNumber: number,
     questionId: string
   ): Promise<EvaluationResultOut> => {
     return apiClient.post<EvaluationResultOut>(
-      `/api/evaluations/users/${userId}/sessions/${sessionId}/days/${dayNumber}/questions/${questionId}/reevaluate`
+      `/api/evaluations/sessions/${sessionId}/days/${dayNumber}/questions/${questionId}/reevaluate`
     );
   },
 
+  // POST /api/evaluations/sessions/{session_id}/days/{day_number}/questions/difficulty/{difficulty}/evaluate - user_id from JWT
   evaluateDifficultyBucket: async (
-    userId: string,
     sessionId: string,
     dayNumber: number,
     difficulty: string,
     payload: DifficultyBucketSubmission
   ): Promise<DifficultyBucketEvaluationOut> => {
     return apiClient.post<DifficultyBucketEvaluationOut>(
-      `/api/evaluations/users/${userId}/sessions/${sessionId}/days/${dayNumber}/questions/difficulty/${difficulty}/evaluate`,
+      `/api/evaluations/sessions/${sessionId}/days/${dayNumber}/questions/difficulty/${difficulty}/evaluate`,
       payload
     );
   },
 
+  // GET /api/evaluations/sessions/{session_id}/days/{day_number}/questions/difficulty/{difficulty}/evaluation - user_id from JWT
   getDifficultyBucketEvaluation: async (
-    userId: string,
     sessionId: string,
     dayNumber: number,
     difficulty: string
   ): Promise<DifficultyBucketEvaluationOut> => {
     return apiClient.get<DifficultyBucketEvaluationOut>(
-      `/api/evaluations/users/${userId}/sessions/${sessionId}/days/${dayNumber}/questions/difficulty/${difficulty}/evaluation`
+      `/api/evaluations/sessions/${sessionId}/days/${dayNumber}/questions/difficulty/${difficulty}/evaluation`
     );
   },
 };
-
-

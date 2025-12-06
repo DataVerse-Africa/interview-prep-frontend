@@ -33,43 +33,44 @@ export interface AlignmentSessionResponse {
 }
 
 export const alignmentApi = {
+  // POST /api/alignment - user_id from JWT
   generateAlignmentReport: async (
-    userId: string,
     sessionId?: string | null
   ): Promise<AlignmentReportResponse> => {
     const endpoint = sessionId
-      ? `/api/alignment/${userId}?session_id=${sessionId}`
-      : `/api/alignment/${userId}`;
+      ? `/api/alignment?session_id=${sessionId}`
+      : `/api/alignment`;
     return apiClient.post<AlignmentReportResponse>(endpoint, {});
   },
 
+  // GET /api/alignment/latest - user_id from JWT
   getLatestAlignmentReport: async (
-    userId: string,
     sessionId?: string | null
   ): Promise<AlignmentReportResponse> => {
     return apiClient.get<AlignmentReportResponse>(
-      `/api/alignment/${userId}/latest`,
-      { session_id: sessionId }
+      `/api/alignment/latest`,
+      sessionId ? { session_id: sessionId } : {}
     );
   },
 
-  listAlignmentSessions: async (userId: string): Promise<AlignmentSessionResponse[]> => {
-    return apiClient.get<AlignmentSessionResponse[]>(`/api/alignment/${userId}/sessions`);
+  // GET /api/alignment/sessions - user_id from JWT
+  listAlignmentSessions: async (): Promise<AlignmentSessionResponse[]> => {
+    return apiClient.get<AlignmentSessionResponse[]>(`/api/alignment/sessions`);
   },
 
-  getAlignmentForLatestSession: async (userId: string): Promise<AlignmentReportResponse> => {
+  // GET /api/alignment/sessions/latest - user_id from JWT
+  getAlignmentForLatestSession: async (): Promise<AlignmentReportResponse> => {
     return apiClient.get<AlignmentReportResponse>(
-      `/api/alignment/${userId}/sessions/latest`
+      `/api/alignment/sessions/latest`
     );
   },
 
+  // GET /api/alignment/sessions/{session_id} - user_id from JWT
   getAlignmentForSession: async (
-    userId: string,
     sessionId: string
   ): Promise<AlignmentReportResponse> => {
     return apiClient.get<AlignmentReportResponse>(
-      `/api/alignment/${userId}/sessions/${sessionId}`
+      `/api/alignment/sessions/${sessionId}`
     );
   },
 };
-

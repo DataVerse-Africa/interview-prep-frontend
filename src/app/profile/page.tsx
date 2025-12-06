@@ -6,11 +6,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  User, 
-  Mail, 
-  Calendar, 
-  LogOut, 
+import {
+  User,
+  Mail,
+  Calendar,
+  LogOut,
   ArrowLeft,
   Loader2,
   Settings,
@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { sessionManager } from "@/lib/utils/session";
+import { ResumeManager } from "@/components/resume";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (authLoading) return;
-    
+
     if (!isAuthenticated || !user) {
       router.push("/auth/sign-in");
       return;
@@ -41,17 +42,27 @@ export default function ProfilePage() {
       const duration = sessionManager.getSessionDuration();
       setSessionDuration(duration);
     };
-    
+
     updateDuration();
     const interval = setInterval(updateDuration, 60000);
-    
+
     return () => clearInterval(interval);
   }, []);
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/30 via-background to-indigo-50/30 dark:from-blue-950/10 dark:via-background dark:to-indigo-950/10">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-blue-50/30 via-background to-indigo-50/30 dark:from-blue-950/10 dark:via-background dark:to-indigo-950/10">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-muted-foreground font-medium">Verifying session...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-blue-50/30 via-background to-indigo-50/30 dark:from-blue-950/10 dark:via-background dark:to-indigo-950/10">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-muted-foreground font-medium">Redirecting to login...</p>
       </div>
     );
   }
@@ -87,7 +98,7 @@ export default function ProfilePage() {
       <header className="border-b bg-background/95 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard">
+            <Link href="/home">
               <Button variant="ghost" size="icon" className="hover:bg-muted">
                 <ArrowLeft className="h-5 w-5" />
               </Button>
@@ -97,7 +108,7 @@ export default function ProfilePage() {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/dashboard">
+            <Link href="/home">
               <Button variant="ghost" size="sm">
                 Dashboard
               </Button>
@@ -205,16 +216,16 @@ export default function ProfilePage() {
               </div>
 
               <div className="pt-4 border-t space-y-3">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start text-blue-600 border-blue-300 hover:bg-blue-50 hover:border-blue-400 dark:text-blue-300 dark:border-blue-700 dark:hover:bg-blue-900"
-                  onClick={() => router.push('/dashboard')}
+                  onClick={() => router.push('/home')}
                 >
                   <Settings className="h-4 w-4 mr-2" />
                   Go to Dashboard
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 dark:text-red-300 dark:border-red-700 dark:hover:bg-red-900"
                   onClick={logout}
                 >
@@ -261,6 +272,11 @@ export default function ProfilePage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Resume Management */}
+        <div className="mt-6">
+          <ResumeManager />
+        </div>
       </div>
     </div>
   );

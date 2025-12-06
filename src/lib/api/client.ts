@@ -76,7 +76,7 @@ class ApiClient {
     // Check for admin token first, then regular token
     const adminToken = this.getAdminToken();
     const tokenToUse = adminToken || this.token;
-    
+
     if (tokenToUse) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${tokenToUse}`;
     }
@@ -116,7 +116,11 @@ class ApiClient {
       throw new ApiClientError(response.status, errorData);
     }
 
-    // Handle empty responses
+    // Handle empty responses (204 No Content)
+    if (response.status === 204) {
+      return {} as T;
+    }
+
     const contentType = response.headers.get('content-type');
     if (contentType && contentType.includes('application/json')) {
       return response.json();
@@ -145,11 +149,11 @@ class ApiClient {
     const options: RequestInit = {
       method: 'POST',
     };
-    
+
     if (data && Object.keys(data).length > 0) {
       options.body = JSON.stringify(data);
     }
-    
+
     return this.request<T>(endpoint, options);
   }
 
@@ -185,6 +189,68 @@ class ApiClient {
       return response.json();
     }
     return {} as T;
+  }
+
+  async put<T>(endpoint: string, data?: any): Promise<T> {
+    const options: RequestInit = {
+      method: 'PUT',
+    };
+
+    if (data && Object.keys(data).length > 0) {
+      options.body = JSON.stringify(data);
+    }
+
+    return this.request<T>(endpoint, options);
+  }
+
+  async putFormData<T>(endpoint: string, formData: FormData): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
+    const headers: HeadersInit = {};
+
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorData: ApiError;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = {
+          error: 'unknown_error',
+          message: `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
+      throw new ApiClientError(response.status, errorData);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return response.json();
+    }
+    return {} as T;
+  }
+
+  async patch<T>(endpoint: string, data?: any): Promise<T> {
+    const options: RequestInit = {
+      method: 'PATCH',
+    };
+
+    if (data && Object.keys(data).length > 0) {
+      options.body = JSON.stringify(data);
+    }
+
+    return this.request<T>(endpoint, options);
+  }
+
+  async delete<T = void>(endpoint: string): Promise<T> {
+    return this.request<T>(endpoint, { method: 'DELETE' });
   }
 }
 

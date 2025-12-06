@@ -1,10 +1,43 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Brain, Target, BookOpen, Clock, TrendingUp, Trophy, Sparkles, Zap, Star, ArrowRight, Users, Award } from "lucide-react";
+import { CheckCircle2, Brain, Target, BookOpen, Clock, TrendingUp, Trophy, Sparkles, Zap, Star, ArrowRight, Users, Award, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Home() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    // Redirect authenticated users to user dashboard
+    if (!isLoading && isAuthenticated) {
+      router.push("/home");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  // Show loading while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  // If authenticated, show loading while redirecting
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-background to-indigo-50 dark:from-blue-950/20 dark:via-background dark:to-indigo-950/20">
       {/* Header */}
@@ -44,9 +77,9 @@ export default function Home() {
                 <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent font-bold">
                   AI-Powered Interview Prep
                 </span>
-        </Badge>
+              </Badge>
             </div>
-            
+
             <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-tight">
               <span className="block bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
                 Ace Your Next
@@ -54,8 +87,8 @@ export default function Home() {
               <span className="block bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 dark:from-purple-400 dark:via-pink-400 dark:to-rose-400 bg-clip-text text-transparent mt-2">
                 Interview
               </span>
-        </h1>
-            
+            </h1>
+
             <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto lg:mx-0 leading-relaxed">
               Transform your interview performance with <span className="font-semibold text-foreground">personalized AI coaching</span>, real-time feedback, and confidence-building practice sessions.
             </p>
@@ -92,17 +125,17 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-4">
-          <Link href="/auth/sign-up">
+              <Link href="/auth/sign-up">
                 <Button size="lg" className="text-lg px-8 h-14 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white shadow-xl hover:shadow-2xl transition-all group">
                   Start Acing Interviews
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
-          </Link>
-          <Link href="#features">
+                </Button>
+              </Link>
+              <Link href="#features">
                 <Button size="lg" variant="outline" className="text-lg px-8 h-14 border-2 hover:bg-muted">
                   See How It Works
-            </Button>
-          </Link>
+                </Button>
+              </Link>
             </div>
           </div>
 
@@ -113,7 +146,7 @@ export default function Home() {
               <div className="absolute -top-4 -right-4 bg-gradient-to-br from-yellow-400 to-orange-400 rounded-full p-3 shadow-lg animate-bounce z-10">
                 <Star className="h-6 w-6 text-white fill-white" />
               </div>
-              
+
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <div className="p-3 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500">
@@ -360,15 +393,15 @@ export default function Home() {
           <h2 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
             Ready to Ace Your Interview?
           </h2>
-        <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Join thousands of candidates who have successfully prepared for their dream jobs with our AI-powered platform.
-        </p>
-        <Link href="/auth/sign-up">
+          </p>
+          <Link href="/auth/sign-up">
             <Button size="lg" className="text-lg px-12 h-14 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white shadow-xl hover:shadow-2xl transition-all group">
               Start Your Journey
               <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-          </Button>
-        </Link>
+            </Button>
+          </Link>
         </div>
       </section>
 

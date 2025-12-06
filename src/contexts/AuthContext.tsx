@@ -78,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load persisted user data on mount
   useEffect(() => {
     const loadPersistedAuth = async () => {
+      console.log('[AuthContext] Loading persisted auth...');
       if (typeof window === 'undefined') {
         setIsLoading(false);
         return;
@@ -86,11 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const storedData = storage.getUserData();
         const storedToken = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+        console.log('[AuthContext] Stored data exists:', !!storedData, 'Token exists:', !!storedToken);
 
         if (storedData && storedToken) {
           // Check if token is expired (if expiresAt is set)
           if (storedData.expiresAt && storedData.expiresAt < Date.now()) {
-            console.log('Token expired, clearing session');
+            console.log('[AuthContext] Token expired, clearing session');
             storage.clearUserData();
             setIsLoading(false);
             return;
@@ -99,13 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Check if session is stale (more than 30 days of inactivity)
           const DAYS_30 = 30 * 24 * 60 * 60 * 1000;
           if (storedData.lastActivity && Date.now() - storedData.lastActivity > DAYS_30) {
-            console.log('Session expired due to inactivity');
+            console.log('[AuthContext] Session expired due to inactivity');
             storage.clearUserData();
             setIsLoading(false);
             return;
           }
 
           // Restore user and token
+          console.log('[AuthContext] Restoring user:', storedData.user?.email);
           setToken(storedToken);
           setUser(storedData.user);
           apiClient.setToken(storedToken);
@@ -119,8 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!userInfo) {
               throw new Error('Invalid token');
             }
+            console.log('[AuthContext] Token verified');
           } catch (error) {
-            console.error('Token validation failed:', error);
+            console.error('[AuthContext] Token validation failed:', error);
             storage.clearUserData();
             setToken(null);
             setUser(null);
@@ -128,14 +132,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (error) {
-        console.error('Error loading persisted auth:', error);
+        console.error('[AuthContext] Error loading persisted auth:', error);
         storage.clearUserData();
       } finally {
+        console.log('[AuthContext] Auth loading complete');
         setIsLoading(false);
       }
     };
 
-    loadPersistedAuth();
+    // Safety timeout - ensure isLoading becomes false after 3 seconds
+    const safetyTimeout = setTimeout(() => {
+      console.warn('[AuthContext] Safety timeout triggered - forcing isLoading to false');
+      setIsLoading(false);
+    }, 3000);
+
+    loadPersistedAuth().finally(() => clearTimeout(safetyTimeout));
   }, []);
 
   // Handle logout event from API client (e.g., on 401)
@@ -190,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authApi.login({ email, password });
       const token = response.access_token;
-      
+
       // Decode token to get expiration if available
       let expiresAt: number | undefined;
       try {
@@ -215,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(token);
       setUser(response.user);
       apiClient.setToken(token);
-      router.push('/dashboard');
+      router.push('/home'); // Redirect to new User Dashboard
     } catch (error: any) {
       throw error;
     }
@@ -225,7 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authApi.signup({ email, password });
       const token = response.access_token;
-      
+
       // Decode token to get expiration if available
       let expiresAt: number | undefined;
       try {
@@ -250,7 +261,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(token);
       setUser(response.user);
       apiClient.setToken(token);
-      router.push('/onboarding');
+      // After signup, still go to onboarding? Or home? New users might need onboarding.
+      // Keeping /onboarding for now as sessions need a session_id
+      // But onboarding now accepts session_id param.
+      // If we go to /home, they can create a session.
+      router.push('/home');
     } catch (error: any) {
       throw error;
     }
@@ -258,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     if (!token) return;
-    
+
     try {
       const userInfo = authApi.getCurrentUser();
       if (userInfo && user) {
@@ -267,7 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: userInfo.email || user.email,
         };
         setUser(updatedUser);
-        
+
         // Update stored user data
         const storedData = storage.getUserData();
         if (storedData) {
@@ -292,13 +307,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = !!user && !!token;
 
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        token, 
-        login, 
-        signup, 
-        logout, 
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        login,
+        signup,
+        logout,
         isLoading,
         refreshUser,
         isAuthenticated,

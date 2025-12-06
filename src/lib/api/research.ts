@@ -1,22 +1,23 @@
 import { apiClient } from './client';
 
 export const researchApi = {
-  getResearchTopics: async (userId: string, sessionId: string): Promise<any> => {
-    return apiClient.get<any>(`/api/research/${userId}/sessions/${sessionId}/topics`);
+  // GET /api/research/sessions/{session_id}/topics - user_id from JWT
+  getResearchTopics: async (sessionId: string): Promise<any> => {
+    return apiClient.get<any>(`/api/research/sessions/${sessionId}/topics`);
   },
 
-  runResearchWorkflow: async (userId: string, sessionId: string): Promise<any> => {
-    return apiClient.post<any>(`/api/research/${userId}/sessions/${sessionId}`, {});
+  // POST /api/research/sessions/{session_id} - user_id from JWT
+  runResearchWorkflow: async (sessionId: string): Promise<any> => {
+    return apiClient.post<any>(`/api/research/sessions/${sessionId}`, {});
   },
 
+  // GET /api/research/sessions/{session_id}/results - user_id from JWT
   getResearchResults: async (
-    userId: string,
     sessionId: string,
     limit: number = 5
   ): Promise<any> => {
-    return apiClient.get<any>(`/api/research/${userId}/sessions/${sessionId}/results`, {
+    return apiClient.get<any>(`/api/research/sessions/${sessionId}/results`, {
       limit,
     });
   },
 };
-

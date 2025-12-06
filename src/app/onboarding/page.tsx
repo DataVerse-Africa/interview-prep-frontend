@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,12 +12,17 @@ import { Brain, ArrowRight, ArrowLeft, Upload, FileText } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { onboardingApi } from "@/lib/api/onboarding";
+import { alignmentApi } from "@/lib/api/alignment";
+import { questionsApi } from "@/lib/api/questions";
 import { ApiClientError } from "@/lib/api/client";
 import { toast } from "sonner";
+import { ResumeSelector } from "@/components/resume";
 
 type OnboardingData = {
   role: string;
-  resume: File | null;
+  resumeSource: "existing" | "new";
+  resumeId: string | null;
+  newResumeFile: File | null;
   jobDescription: string;
   preparationTime: string;
   preparationUnit: string;
@@ -25,12 +30,16 @@ type OnboardingData = {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("session_id");
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [data, setData] = useState<OnboardingData>({
     role: "",
-    resume: null,
+    resumeSource: "new",
+    resumeId: null,
+    newResumeFile: null,
     jobDescription: "",
     preparationTime: "",
     preparationUnit: "days",
@@ -41,7 +50,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (authLoading) return; // Wait for auth to load
-    
+
     if (!isAuthenticated || !user?.user_id) {
       router.push("/auth/sign-in");
       return;
@@ -65,43 +74,53 @@ export default function OnboardingPage() {
         const days = data.preparationUnit === "days"
           ? parseInt(data.preparationTime)
           : data.preparationUnit === "weeks"
-          ? parseInt(data.preparationTime) * 7
-          : parseInt(data.preparationTime) * 30;
+            ? parseInt(data.preparationTime) * 7
+            : parseInt(data.preparationTime) * 30;
 
-        const onboardingResponse = await onboardingApi.startOnboarding(user.user_id, {
+        const onboardingResponse = await onboardingApi.startOnboarding({
           role: data.role,
           preparation_time_days: days,
-          resume_file: data.resume || undefined,
+          resume_file: data.resumeSource === "new" ? data.newResumeFile || undefined : undefined,
+          resume_id: data.resumeSource === "existing" ? data.resumeId || undefined : undefined,
           job_description_text: data.jobDescription || undefined,
+          session_id: sessionId || undefined,
         });
 
-        // Create a session from the onboarding record
-        if (onboardingResponse.session_id) {
-          // Session already created
-          toast.success("Onboarding completed successfully! Redirecting to practice questions...");
-          setTimeout(() => router.push("/sessions"), 1500);
-        } else {
-          // Try to get the latest onboarding record and create a session
-          try {
-            const latestOnboarding = await onboardingApi.getLatestOnboardingRecord(user.user_id);
-            if (latestOnboarding) {
-              const { sessionsApi } = await import("@/lib/api/sessions");
-              await sessionsApi.createApplicationSession({
-                onboarding_id: latestOnboarding.id,
-                session_name: `${data.role} - Interview Prep`,
-              });
-              toast.success("Onboarding completed! Redirecting to practice questions...");
-              setTimeout(() => router.push("/sessions"), 1500);
-            }
-          } catch (sessionError) {
-            console.error("Error creating session:", sessionError);
-            toast.success("Onboarding completed! You can create a session from the dashboard.");
-            router.push("/dashboard");
-          }
+        // Get the session ID from the response (or use the one passed in)
+        const resultSessionId = onboardingResponse.session_id || sessionId;
+
+        // Step 2: Trigger alignment report generation
+        toast.success("Onboarding complete! Generating alignment analysis...");
+
+        try {
+          await alignmentApi.generateAlignmentReport(resultSessionId);
+          toast.success("Alignment analysis generated! Redirecting to dashboard...");
+        } catch (alignmentError) {
+          console.warn("Alignment generation failed, redirecting anyway:", alignmentError);
+          toast.info("Redirecting to dashboard...");
         }
+
+        // Step 3: Pre-generate Day 1 questions in the background (fire and forget)
+        // This ensures questions are ready when user visits the sessions page
+        if (resultSessionId) {
+          questionsApi.generateQuestionsForSessionDay(resultSessionId, 1)
+            .then(() => console.log("[Onboarding] Day 1 questions pre-generated successfully"))
+            .catch((err) => console.warn("[Onboarding] Day 1 pre-generation failed (will retry on sessions page):", err));
+        }
+
+        // Redirect to dashboard with session ID (not alignment page)
+        setTimeout(() => router.push(`/dashboard${resultSessionId ? `?session=${resultSessionId}` : ''}`), 1000);
       } catch (error: any) {
+        console.error("Onboarding error full:", error);
         if (error instanceof ApiClientError) {
-          toast.error(error.data.message || "Failed to submit onboarding data");
+          console.error("API Error Data:", error.data);
+          // If 422, show specific validation error
+          if (error.status === 422 && error.data.detail) {
+            console.error("Validation errors:", error.data.detail);
+            toast.error(`Validation failed: ${JSON.stringify(error.data.detail)}`);
+          } else {
+            toast.error(error.data.message || "Failed to submit onboarding data");
+          }
         } else {
           toast.error("An unexpected error occurred");
         }
@@ -118,17 +137,16 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setData({ ...data, resume: file });
-  };
-
   const isStepValid = () => {
     switch (step) {
       case 1:
         return data.role.trim().length > 0;
       case 2:
-        return data.resume !== null;
+        // Valid if using existing resume with selection OR uploading new file
+        return (
+          (data.resumeSource === "existing" && data.resumeId !== null) ||
+          (data.resumeSource === "new" && data.newResumeFile !== null)
+        );
       case 3:
         return data.jobDescription.trim().length > 0;
       case 4:
@@ -181,35 +199,20 @@ export default function OnboardingPage() {
             )}
 
             {step === 2 && (
-              <div className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors">
-                  <input
-                    type="file"
-                    id="resume"
-                    accept=".pdf,.doc,.docx,.txt"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                  <label htmlFor="resume" className="cursor-pointer">
-                    {data.resume ? (
-                      <div className="flex items-center justify-center gap-2 text-primary">
-                        <FileText className="h-8 w-8" />
-                        <span className="font-medium">{data.resume.name}</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Upload className="h-12 w-12 mx-auto text-muted-foreground" />
-                        <p className="text-muted-foreground">
-                          Click to upload or drag and drop
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          PDF, DOC, DOCX, or TXT (Max 5MB)
-                        </p>
-                      </div>
-                    )}
-                  </label>
-                </div>
-              </div>
+              <ResumeSelector
+                selectedResumeId={data.resumeId}
+                newResumeFile={data.newResumeFile}
+                resumeSource={data.resumeSource}
+                onResumeSourceChange={(source) =>
+                  setData((prev) => ({ ...prev, resumeSource: source }))
+                }
+                onResumeIdChange={(id) =>
+                  setData((prev) => ({ ...prev, resumeId: id }))
+                }
+                onNewFileChange={(file) =>
+                  setData((prev) => ({ ...prev, newResumeFile: file }))
+                }
+              />
             )}
 
             {step === 3 && (
@@ -282,8 +285,8 @@ export default function OnboardingPage() {
                 {isSubmitting
                   ? "Submitting..."
                   : step === totalSteps
-                  ? "Complete Setup"
-                  : "Next"}
+                    ? "Complete Setup"
+                    : "Next"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </div>
