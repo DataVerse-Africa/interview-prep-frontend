@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,8 @@ import Link from "next/link";
 
 export default function SessionsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionIdFromUrl = searchParams.get("session");
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [sessions, setSessions] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState<any>(null);
@@ -43,8 +45,14 @@ export default function SessionsPage() {
   const [currentAnswerText, setCurrentAnswerText] = useState("");
   const [bucketEvaluation, setBucketEvaluation] = useState<DifficultyBucketEvaluationOut | null>(null);
 
-  // Track completed difficulties for progressive unlock
+  // Track completed difficulties for progressive unlock (per current day)
   const [completedDifficulties, setCompletedDifficulties] = useState<Set<string>>(new Set());
+
+  // Track which days have been fully completed (all 3 difficulties done)
+  const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
+
+  // Track total number of practice days for this session
+  const [totalPracticeDays, setTotalPracticeDays] = useState<number>(7);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -86,8 +94,15 @@ export default function SessionsPage() {
       const userSessions = await sessionsApi.listSessions();
       setSessions(userSessions);
       if (userSessions.length > 0) {
-        // Sort by created_at desc if needed, but assuming API returns relevant order
-        setSelectedSession(userSessions[0]);
+        // Fetch full session details to get target_role_data with preparation_time_days
+        try {
+          const sessionDetails = await sessionsApi.getSession(userSessions[0].id);
+          setSelectedSession(sessionDetails);
+        } catch {
+          // Fallback to basic session data if details fetch fails
+          setSelectedSession(userSessions[0]);
+        }
+        await loadCompletedDaysFromBackend(userSessions[0].id);
         await loadQuestionsForSession(userSessions[0].id, 1);
       }
     } catch (error) {
@@ -95,6 +110,38 @@ export default function SessionsPage() {
       toast.error("Failed to load sessions");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Load which days have been fully completed (all 3 difficulties) from the backend
+  const loadCompletedDaysFromBackend = async (sessionId: string) => {
+    try {
+      const evaluations = await sessionsApi.getSessionEvaluations(sessionId);
+      const newCompletedDays = new Set<number>();
+
+      // Set total practice days from the API response
+      if (evaluations.total_days) {
+        setTotalPracticeDays(evaluations.total_days);
+        console.log("[Sessions] Total practice days:", evaluations.total_days);
+      }
+
+      for (const day of evaluations.days) {
+        // Check if this day has all 3 difficulties answered
+        const difficulties = new Set(day.questions.filter(q => q.is_answered).map(q => q.difficulty.toLowerCase()));
+        const hasEasy = difficulties.has("easy");
+        const hasMedium = difficulties.has("medium");
+        const hasHard = difficulties.has("hard");
+
+        if (hasEasy && hasMedium && hasHard) {
+          newCompletedDays.add(day.day_number);
+        }
+      }
+
+      setCompletedDays(newCompletedDays);
+      console.log("[Sessions] Loaded completed days:", Array.from(newCompletedDays));
+    } catch (error) {
+      console.warn("[Sessions] Could not load completed days:", error);
+      // Not critical - user can still use the app
     }
   };
 
@@ -246,17 +293,25 @@ export default function SessionsPage() {
       toast.success("Answers evaluated successfully!");
 
       // Mark this difficulty as completed (prevents re-submission)
-      setCompletedDifficulties(prev => new Set([...prev, selectedDifficulty.toLowerCase()]));
+      const newCompletedDifficulties = new Set([...completedDifficulties, selectedDifficulty.toLowerCase()]);
+      setCompletedDifficulties(newCompletedDifficulties);
 
-      // Pre-generate next day's questions in background (fire and forget)
-      // This ensures questions are ready when user comes back tomorrow
-      const nextDay = currentDay + 1;
-      const prepDays = selectedSession.target_role_data?.preparation_time_days || 7;
+      // Check if all 3 difficulties are now complete for this day
+      const allDifficultiesComplete = ["easy", "medium", "hard"].every(d => newCompletedDifficulties.has(d));
 
-      if (nextDay <= prepDays) {
-        questionsApi.generateQuestionsForSessionDay(selectedSession.id, nextDay)
-          .then(() => console.log(`[Sessions] Day ${nextDay} questions pre-generated`))
-          .catch((err) => console.warn(`[Sessions] Day ${nextDay} pre-generation failed:`, err));
+      if (allDifficultiesComplete) {
+        // Mark this day as fully completed
+        setCompletedDays(prev => new Set([...prev, currentDay]));
+        toast.success(`Day ${currentDay} completed! 🎉`);
+
+        // Pre-generate next day's questions in background (fire and forget)
+        const nextDay = currentDay + 1;
+
+        if (nextDay <= totalPracticeDays) {
+          questionsApi.generateQuestionsForSessionDay(selectedSession.id, nextDay)
+            .then(() => console.log(`[Sessions] Day ${nextDay} questions pre-generated`))
+            .catch((err) => console.warn(`[Sessions] Day ${nextDay} pre-generation failed:`, err));
+        }
       }
     } catch (error) {
       console.error("Error submitting answers:", error);
@@ -340,7 +395,58 @@ export default function SessionsPage() {
               </Card>
             )}
 
-            {/* Difficulty Selector - Visual Cards */}
+            {/* Day Navigation */}
+            {selectedSession && (
+              <Card className="shadow-md border-2 border-slate-200/50 dark:border-slate-800/50 overflow-hidden">
+                <CardHeader className="pb-2 pt-3 px-4">
+                  <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Practice Days
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-3 px-4">
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {Array.from({ length: totalPracticeDays }, (_, i) => i + 1).map((day) => {
+                      const isCurrentDay = currentDay === day;
+                      const isDayCompleted = completedDays.has(day);
+                      // Day 1 is always unlocked
+                      // Day N+1 only unlocks after Day N is fully completed (all 3 difficulties)
+                      const isUnlocked = day === 1 || completedDays.has(day - 1);
+
+                      return (
+                        <button
+                          key={day}
+                          onClick={() => {
+                            if (isUnlocked && selectedSession) {
+                              setCurrentDay(day);
+                              // Don't reset if returning to a completed day
+                              if (!isDayCompleted) {
+                                setCompletedDifficulties(new Set());
+                              }
+                              loadQuestionsForSession(selectedSession.id, day);
+                            }
+                          }}
+                          disabled={!isUnlocked}
+                          className={`flex-shrink-0 w-10 h-10 rounded-lg font-bold transition-all ${isCurrentDay
+                            ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg"
+                            : isDayCompleted
+                              ? "bg-green-100 text-green-700 border-2 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700"
+                              : isUnlocked
+                                ? "bg-muted hover:bg-muted/80 text-foreground"
+                                : "bg-muted/30 text-muted-foreground/50 cursor-not-allowed"
+                            }`}
+                        >
+                          {isDayCompleted ? "✓" : day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Complete all 3 difficulties to unlock the next day
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             <Card className="shadow-md border-2 border-slate-200/50 dark:border-slate-800/50 overflow-hidden p-0">
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
