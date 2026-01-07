@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ const dimensionColors: Record<string, string> = {
     education: "from-indigo-500 to-blue-500",
 };
 
-export default function AlignmentPage() {
+function AlignmentContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -579,5 +579,20 @@ export default function AlignmentPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function AlignmentPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+                    <p className="text-muted-foreground font-medium">Loading...</p>
+                </div>
+            </div>
+        }>
+            <AlignmentContent />
+        </Suspense>
     );
 }

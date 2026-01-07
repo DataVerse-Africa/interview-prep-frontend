@@ -1,5 +1,4 @@
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://interview-prep-api.dataverseafrica.org';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://0.0.0.0:10000';
 
 export interface ApiError {
   error: string;
@@ -44,7 +43,6 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       if (token) {
         localStorage.setItem('admin_token', token);
-        // Use admin token for requests
         this.token = token;
       } else {
         localStorage.removeItem('admin_token');

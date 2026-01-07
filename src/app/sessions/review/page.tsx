@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { sessionsApi, SessionEvaluations, SessionEvaluationDay, SessionEvaluationQuestion } from "@/lib/api/sessions";
 import { toast } from "sonner";
 
-export default function ReviewPage() {
+function ReviewContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const sessionId = searchParams.get("session");
@@ -359,5 +359,20 @@ export default function ReviewPage() {
                 )}
             </main>
         </div>
+    );
+}
+
+export default function ReviewPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+                    <p className="text-muted-foreground font-medium">Loading...</p>
+                </div>
+            </div>
+        }>
+            <ReviewContent />
+        </Suspense>
     );
 }

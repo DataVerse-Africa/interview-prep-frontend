@@ -19,6 +19,7 @@ import { usersApi } from "@/lib/api/users";
 import { sessionsApi } from "@/lib/api/sessions";
 import { UserStatsCard } from "@/components/stats";
 import { SessionCard } from "@/components/session";
+import ChatBox from "@/components/ChatBox";
 import type { UserStats } from "@/types/user";
 import type { Session } from "@/types/session";
 import { toast } from "sonner";
@@ -243,6 +244,8 @@ export default function HomePage() {
                     </Card>
                 </div>
             </div>
+
+            <ChatBox />
         </div>
     );
 }

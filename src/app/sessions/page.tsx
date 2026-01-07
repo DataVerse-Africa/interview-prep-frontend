@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,7 @@ import { ApiClientError } from "@/lib/api/client";
 import { toast } from "sonner";
 import Link from "next/link";
 
-export default function SessionsPage() {
+function SessionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionIdFromUrl = searchParams.get("session");
@@ -719,5 +719,17 @@ export default function SessionsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <SessionsContent />
+    </Suspense>
   );
 }

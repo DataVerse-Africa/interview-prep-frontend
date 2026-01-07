@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -34,8 +34,9 @@ import { sessionsApi } from "@/lib/api/sessions";
 import { usersApi } from "@/lib/api/users";
 import { ApiClientError } from "@/lib/api/client";
 import { toast } from "sonner";
+import ChatBox from "@/components/ChatBox";
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionIdFromUrl = searchParams.get("session");
@@ -906,6 +907,21 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ChatBox Component */}
+      <ChatBox />
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50/30 via-background to-indigo-50/30 dark:from-blue-950/10 dark:via-background dark:to-indigo-950/10">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }

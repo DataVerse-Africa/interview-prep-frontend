@@ -75,9 +75,7 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-md shadow-xl border-2 border-blue-200 dark:border-blue-800">
         <CardHeader className="text-center pb-4 pt-5">
           <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg">
-              <Shield className="h-8 w-8 text-white" />
-            </div>
+         
           </div>
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-400 dark:to-purple-400 bg-clip-text text-transparent">
             Admin Login

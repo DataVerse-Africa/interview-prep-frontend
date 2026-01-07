@@ -1,18 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { adminApi } from "@/lib/api/admin";
+import { apiClient } from "@/lib/api/client";
 import { ApiClientError } from "@/lib/api/client";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function SignInPage() {
   const { login } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
@@ -30,9 +34,8 @@ export default function SignInPage() {
     
     if (!password) {
       newErrors.password = "Password is required";
-    } else if (password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
     }
+    // Removed password length requirement to support admin credentials from env
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -47,19 +50,38 @@ export default function SignInPage() {
     setErrors({});
     
     try {
-      await login(email, password);
-      toast.success("Signed in successfully!");
-    } catch (error: any) {
-      if (error instanceof ApiClientError) {
-        if (error.status === 401) {
-          setErrors({ general: "Invalid email or password" });
-        } else {
-          setErrors({ general: error.data.message || "An error occurred" });
-        }
-      } else {
-        setErrors({ general: "An unexpected error occurred" });
+      try {
+        const adminResponse = await adminApi.login(email, password);
+        apiClient.setAdminToken(adminResponse.access_token);
+        toast.success("Admin login successful!");
+        router.push("/admin");
+        return;
+      } catch (adminError: any) {
+     
+        console.log("Admin login failed, trying regular login...");
       }
-      toast.error(errors.general || "Failed to sign in");
+
+      // Try regular user login
+      try {
+        await login(email, password);
+        toast.success("Signed in successfully!");
+      } catch (userError: any) {
+        // Regular user login also failed
+        if (userError instanceof ApiClientError) {
+          if (userError.status === 401) {
+            setErrors({ general: "Invalid email or password" });
+          } else {
+            setErrors({ general: userError.data.message || "An error occurred" });
+          }
+        } else {
+          setErrors({ general: "An unexpected error occurred" });
+        }
+        toast.error(errors.general || "Failed to sign in");
+      }
+    } catch (error: any) {
+      // Fallback error handling
+      setErrors({ general: "An unexpected error occurred" });
+      toast.error("Failed to sign in");
     } finally {
       setIsLoading(false);
     }
@@ -69,9 +91,12 @@ export default function SignInPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-      
           <CardTitle className="text-2xl">Welcome Back</CardTitle>
-          <CardDescription>Sign in to continue your interview preparation</CardDescription>
+          <CardDescription>
+            Sign in to continue your interview preparation
+            <br />
+            <span className="text-xs text-muted-foreground">(Works for both users and admins)</span>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
