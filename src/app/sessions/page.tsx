@@ -26,6 +26,7 @@ import { evaluationsApi, DifficultyBucketEvaluationOut } from "@/lib/api/evaluat
 import { ApiClientError } from "@/lib/api/client";
 import { toast } from "sonner";
 import Link from "next/link";
+import ChatBox from "@/components/ChatBox";
 
 function SessionsContent() {
   const router = useRouter();
@@ -749,6 +750,15 @@ function SessionsContent() {
           </div>
         </div>
       </div>
+
+      {/* Session-aware Chat Assistant */}
+      {selectedSession && (
+        <ChatBox
+          sessionId={selectedSession.id}
+          dayNumber={currentDay}
+          contextType="session"
+        />
+      )}
     </div>
   );
 }

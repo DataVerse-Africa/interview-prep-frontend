@@ -11,6 +11,7 @@ import {
   X,
   Sparkles
 } from "lucide-react";
+import { chatApi, ChatMessage as ApiChatMessage } from "@/lib/api/chat";
 
 interface Message {
   id: string;
@@ -21,50 +22,30 @@ interface Message {
 
 interface ChatBoxProps {
   className?: string;
+  sessionId?: string;
+  dayNumber?: number;
+  contextType?: "general" | "session";
 }
 
 const INITIAL_MESSAGES: Message[] = [
   {
     id: '1',
-    content: "Hi there! I'm your AI interview preparation assistant. I can help you with:\n\n• Interview tips and strategies\n• Resume optimization advice\n• Practice question guidance\n• Career development insights\n\nWhat would you like to know?",
+    content: "Hi there! I'm your AI interview preparation assistant. I can help you with:\n\n• Your practice session progress\n• Understanding quiz results and feedback\n• Areas where you can improve\n• Career development advice\n\nWhat would you like to know?",
     role: 'assistant',
     timestamp: new Date()
   }
 ];
 
-const INTERVIEW_TIPS = {
-  "behavioral": [
-    "Use the STAR method: Situation, Task, Action, Result",
-    "Prepare 3-5 examples for each competency",
-    "Focus on specific achievements, not general responsibilities",
-    "Quantify your impact with metrics when possible"
-  ],
-  "technical": [
-    "Explain your thought process, not just the final answer",
-    "Ask clarifying questions if the problem is ambiguous",
-    "Consider edge cases and error handling",
-    "Discuss time/space complexity trade-offs"
-  ],
-  "system design": [
-    "Start with requirements clarification",
-    "Discuss scalability, reliability, and maintainability",
-    "Consider database choices, caching, and APIs",
-    "Address potential bottlenecks and failure points"
-  ]
-};
-
-const SAMPLE_RESPONSES = {
-  "how to prepare": "Great question! Here's a structured approach:\n\n1. **Research the company** - Understand their culture, products, and recent news\n2. **Review the job description** - Identify key skills and requirements\n3. **Practice common questions** - Both technical and behavioral\n4. **Prepare your own questions** - Show genuine interest in the role\n5. **Mock interviews** - Practice with friends or use our platform\n\nStart with our alignment analysis to see how well your resume matches the role!",
-  "resume tips": "Here are key resume optimization tips:\n\n• **Tailor for each application** - Customize your resume for the specific role\n• **Use quantifiable achievements** - Include metrics and results\n• **Keep it concise** - Aim for 1-2 pages for most roles\n• **Use action verbs** - Start bullet points with strong verbs\n• **Include relevant keywords** - From the job description\n• **Proofread carefully** - Typos can disqualify you\n\nUse our alignment feature to see how well your resume matches job requirements!",
-  "interview anxiety": "It's normal to feel nervous! Here are some strategies:\n\n• **Prepare thoroughly** - Knowledge reduces anxiety\n• **Practice deep breathing** - Take slow breaths before answering\n• **Remember it's a conversation** - Not an interrogation\n• **Focus on your strengths** - You've earned the interview!\n• **Have questions ready** - Shows engagement\n\nOur practice sessions can help you build confidence through repetition.",
-  "default": "That's an interesting question! For personalized advice, try our alignment analysis or practice sessions. You can also ask me about:\n\n• Interview preparation strategies\n• Resume optimization tips\n• Behavioral interview techniques\n• Technical interview approaches\n• Career development advice\n\nWhat specific area would you like to focus on?"
-};
-
 const formatTime = (date: Date): string => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-export default function ChatBox({ className = "" }: ChatBoxProps) {
+export default function ChatBox({
+  className = "",
+  sessionId,
+  dayNumber,
+  contextType = "general"
+}: ChatBoxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [inputValue, setInputValue] = useState("");
@@ -77,40 +58,7 @@ export default function ChatBox({ className = "" }: ChatBoxProps) {
     }
   }, [messages, isTyping]);
 
-  const generateResponse = (userMessage: string): string => {
-    const message = userMessage.toLowerCase();
-
-    // Check for specific topics
-    if (message.includes('behavioral') || message.includes('star method')) {
-      return `For behavioral interviews, here are some key tips:\n\n${INTERVIEW_TIPS.behavioral.map(tip => `• ${tip}`).join('\n')}`;
-    }
-
-    if (message.includes('technical') || message.includes('coding')) {
-      return `For technical interviews:\n\n${INTERVIEW_TIPS.technical.map(tip => `• ${tip}`).join('\n')}`;
-    }
-
-    if (message.includes('system design') || message.includes('architecture')) {
-      return `For system design interviews:\n\n${INTERVIEW_TIPS.system_design.map(tip => `• ${tip}`).join('\n')}`;
-    }
-
-    // Check for common questions
-    if (message.includes('prepare') || message.includes('preparation')) {
-      return SAMPLE_RESPONSES["how to prepare"];
-    }
-
-    if (message.includes('resume') || message.includes('cv')) {
-      return SAMPLE_RESPONSES["resume tips"];
-    }
-
-    if (message.includes('anxiety') || message.includes('nervous') || message.includes('scared')) {
-      return SAMPLE_RESPONSES["interview anxiety"];
-    }
-
-    // Default response
-    return SAMPLE_RESPONSES["default"];
-  };
-
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
 
     const userMessage: Message = {
@@ -124,18 +72,45 @@ export default function ChatBox({ className = "" }: ChatBoxProps) {
     setInputValue("");
     setIsTyping(true);
 
-    // Simulate AI response delay
-    setTimeout(() => {
+    try {
+      // Build history from previous messages (excluding initial message)
+      const history: ApiChatMessage[] = messages
+        .slice(1) // Skip initial greeting
+        .map(m => ({ role: m.role, content: m.content }));
+
+      // Add the current user message
+      history.push({ role: 'user', content: userMessage.content });
+
+      // Call the API
+      const response = await chatApi.sendMessage({
+        message: userMessage.content,
+        context_type: contextType,
+        session_id: sessionId || null,
+        day_number: dayNumber || null,
+        history: history.slice(-10), // Last 10 messages for context
+      });
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: generateResponse(userMessage.content),
+        content: response.response,
         role: 'assistant',
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      // Fallback response on error
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "I apologize, but I'm having trouble connecting right now. Please try again in a moment.",
+        role: 'assistant',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 1000); // 1-2 second delay
+    }
   };
 
   return (
@@ -160,7 +135,9 @@ export default function ChatBox({ className = "" }: ChatBoxProps) {
               </div>
               <div>
                 <h2 className="text-base font-semibold text-gray-900">AI Assistant</h2>
-                <p className="text-xs text-gray-500">Always here to help</p>
+                <p className="text-xs text-gray-500">
+                  {contextType === "session" ? "Session Coach" : "Always here to help"}
+                </p>
               </div>
             </div>
             <button
@@ -187,11 +164,10 @@ export default function ChatBox({ className = "" }: ChatBoxProps) {
 
                 <div className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"} max-w-[75%]`}>
                   <div
-                    className={`rounded-2xl px-3 py-2 ${
-                      message.role === "user"
+                    className={`rounded-2xl px-3 py-2 ${message.role === "user"
                         ? "bg-[hsl(220,71%,38%)] text-white"
                         : "bg-white border border-gray-200 text-gray-900"
-                    }`}
+                      }`}
                   >
                     <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
                   </div>
