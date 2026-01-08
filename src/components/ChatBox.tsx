@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { chatApi, ChatMessage as ApiChatMessage, WebSocketClient, ConversationSummary } from "@/lib/api/chat";
 import { apiClient } from "@/lib/api/client";
+import ReactMarkdown from "react-markdown";
 
 interface Message {
   id: string;
@@ -67,6 +68,7 @@ export default function ChatBox({
   const wsClient = useRef<WebSocketClient | null>(null);
   const mounted = useRef(false);
   const responseTimeout = useRef<NodeJS.Timeout | null>(null);
+  const streamingMessageId = useRef<string | null>(null);
 
   // Scroll to bottom
   useEffect(() => {
@@ -104,7 +106,8 @@ export default function ChatBox({
 
             setMessages(prev => {
               const lastMsg = prev[prev.length - 1];
-              if (lastMsg && lastMsg.role === 'assistant') {
+              // Check if we should append to existing streaming message
+              if (lastMsg && lastMsg.role === 'assistant' && streamingMessageId.current === lastMsg.id) {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
                   ...lastMsg,
@@ -112,8 +115,11 @@ export default function ChatBox({
                 };
                 return updated;
               } else {
+                // Create new streaming message
+                const newId = Date.now().toString();
+                streamingMessageId.current = newId;
                 return [...prev, {
-                  id: Date.now().toString(),
+                  id: newId,
                   content: data.content,
                   role: 'assistant',
                   timestamp: new Date()
@@ -127,27 +133,7 @@ export default function ChatBox({
               responseTimeout.current = null;
             }
 
-            setMessages(prev => {
-              const lastMsg = prev[prev.length - 1];
-              // If we were streaming, update the last message with final content
-              if (lastMsg && lastMsg.role === 'assistant') {
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  ...lastMsg,
-                  content: data.content // Ensure final consistency
-                };
-                return updated;
-              } else {
-                return [...prev, {
-                  id: Date.now().toString(),
-                  content: data.content,
-                  role: data.role || 'assistant',
-                  timestamp: new Date()
-                }];
-              }
-            });
-
-            // Capture conversation ID if newly created
+            // Store conversation_id for future messages
             if (data.conversation_id) {
               setConversationId(prev => {
                 if (!prev) {
@@ -156,6 +142,11 @@ export default function ChatBox({
                 }
                 return data.conversation_id;
               });
+            }
+
+            // DON'T add the message again if we already streamed it
+            if (streamingMessageId.current) {
+              streamingMessageId.current = null; // Just clear the streaming state
             }
           } else if (data.type === 'error') {
             setIsTyping(false);
@@ -227,6 +218,7 @@ export default function ChatBox({
     setConversationId(null);
     setShowHistory(false);
     setIsTyping(false);
+    streamingMessageId.current = null;
     if (responseTimeout.current) {
       clearTimeout(responseTimeout.current);
       responseTimeout.current = null;
@@ -276,14 +268,21 @@ export default function ChatBox({
 
       historyContext.push({ role: 'user', content: userMessage.content });
 
-      wsClient.current?.send({
+      // Build message object - only include conversation_id if exists
+      const messageData: any = {
         message: userMessage.content,
         context_type: contextType,
         session_id: sessionId || null,
         day_number: dayNumber || null,
-        conversation_id: conversationId || null,
         history: historyContext.slice(-10)
-      });
+      };
+
+      // Only include conversation_id if we have one
+      if (conversationId) {
+        messageData.conversation_id = conversationId;
+      }
+
+      wsClient.current?.send(messageData);
     } catch (error) {
       console.error("Send error:", error);
       setIsTyping(false);
@@ -404,7 +403,29 @@ export default function ChatBox({
                           : "bg-white border border-gray-200 text-gray-900"
                           }`}
                       >
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                        <div className="max-w-full overflow-x-auto prose prose-sm prose-gray dark:prose-invert max-w-none">
+                          {message.role === 'assistant' ? (
+                            <ReactMarkdown
+                              components={{
+                                h1: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1">{children}</h3>,
+                                h2: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1">{children}</h3>,
+                                h3: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1">{children}</h4>,
+                                p: ({ children }) => <p className="text-sm leading-relaxed mb-2">{children}</p>,
+                                ul: ({ children }) => <ul className="list-disc pl-4 mb-2 text-sm space-y-1">{children}</ul>,
+                                ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 text-sm space-y-1">{children}</ol>,
+                                li: ({ children }) => <li className="text-sm">{children}</li>,
+                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                blockquote: ({ children }) => <blockquote className="border-l-2 border-blue-400 pl-2 italic text-gray-600 my-2">{children}</blockquote>,
+                                hr: () => <hr className="my-3 border-gray-200" />,
+                                code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-xs">{children}</code>,
+                              }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          ) : (
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
+                          )}
+                        </div>
                       </div>
                       <span className="text-xs text-gray-500 mt-1 px-1">{formatTime(message.timestamp)}</span>
                     </div>
