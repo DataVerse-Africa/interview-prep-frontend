@@ -9,9 +9,13 @@ import {
   Send,
   User,
   X,
-  Sparkles
+  Sparkles,
+  Clock,
+  Plus,
+  MessageSquare
 } from "lucide-react";
-import { chatApi, ChatMessage as ApiChatMessage } from "@/lib/api/chat";
+import { chatApi, ChatMessage as ApiChatMessage, WebSocketClient, ConversationSummary } from "@/lib/api/chat";
+import { apiClient } from "@/lib/api/client";
 
 interface Message {
   id: string;
@@ -47,19 +51,141 @@ export default function ChatBox({
   contextType = "general"
 }: ChatBoxProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Chat State
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // History State
+  const [history, setHistory] = useState<ConversationSummary[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsClient = useRef<WebSocketClient | null>(null);
+  const mounted = useRef(false);
+
+  // Scroll to bottom
   useEffect(() => {
-    if (messagesEndRef.current) {
+    if (messagesEndRef.current && !showHistory) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isTyping]);
+  }, [messages, isTyping, showHistory, isOpen]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      wsClient.current?.disconnect();
+    };
+  }, []);
+
+  // Initialize WS when opening chat
+  useEffect(() => {
+    if (isOpen && !wsClient.current) {
+      const token = apiClient.getToken();
+      if (token) {
+        const client = new WebSocketClient(token);
+
+        client.onMessage((data) => {
+          if (data.type === 'status') {
+            setIsTyping(data.status === 'thinking');
+          } else if (data.type === 'message') {
+            setIsTyping(false);
+            const newMessage: Message = {
+              id: Date.now().toString(),
+              content: data.content,
+              role: data.role || 'assistant',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, newMessage]);
+
+            // Capture conversation ID if newly created
+            if (data.conversation_id) {
+              setConversationId(prev => {
+                if (!prev) {
+                  // If we just got a conversation ID, refresh history to show it eventually
+                  fetchHistory();
+                }
+                return data.conversation_id;
+              });
+            }
+          } else if (data.type === 'error') {
+            setIsTyping(false);
+            const errorMessage: Message = {
+              id: Date.now().toString(),
+              content: `Error: ${data.content}`,
+              role: 'assistant',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, errorMessage]);
+          }
+        });
+
+        client.connect();
+        wsClient.current = client;
+      }
+    }
+  }, [isOpen]);
+
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const data = await chatApi.getHistory(contextType);
+      setHistory(data);
+    } catch (error) {
+      console.error("Failed to load history:", error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleOpenHistory = () => {
+    setShowHistory(true);
+    fetchHistory();
+  };
+
+  const loadConversation = async (summary: ConversationSummary) => {
+    try {
+      // Load messages
+      const msgs = await chatApi.getConversationMessages(summary.id);
+
+      const formattedMessages: Message[] = msgs.map((m: ApiChatMessage, i: number) => ({
+        id: `${summary.id}-${i}`,
+        content: m.content,
+        role: m.role,
+        timestamp: new Date(summary.updated_at) // Approximate
+      }));
+
+      setMessages(formattedMessages);
+      setConversationId(summary.id);
+      setShowHistory(false);
+    } catch (error) {
+      console.error("Failed to load conversation:", error);
+    }
+  };
+
+  const startNewChat = () => {
+    setMessages(INITIAL_MESSAGES);
+    setConversationId(null);
+    setShowHistory(false);
+  };
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
+
+    if (!wsClient.current || !wsClient.current.isConnected()) {
+      // Try to reconnect
+      const token = apiClient.getToken();
+      if (token) {
+        wsClient.current = new WebSocketClient(token);
+        wsClient.current.connect();
+        // Wait a bit? For now, simplistic fallback
+      }
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -73,42 +199,24 @@ export default function ChatBox({
     setIsTyping(true);
 
     try {
-      // Build history from previous messages (excluding initial message)
-      const history: ApiChatMessage[] = messages
-        .slice(1) // Skip initial greeting
+      // Build previous history for context if needed (not strictly needed with conversation_id)
+      // but good for first message in new conversation
+      const historyContext: ApiChatMessage[] = conversationId ? [] : messages
+        .slice(1)
         .map(m => ({ role: m.role, content: m.content }));
 
-      // Add the current user message
-      history.push({ role: 'user', content: userMessage.content });
+      historyContext.push({ role: 'user', content: userMessage.content });
 
-      // Call the API
-      const response = await chatApi.sendMessage({
+      wsClient.current?.send({
         message: userMessage.content,
         context_type: contextType,
         session_id: sessionId || null,
         day_number: dayNumber || null,
-        history: history.slice(-10), // Last 10 messages for context
+        conversation_id: conversationId || null,
+        history: historyContext.slice(-10)
       });
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: response.response,
-        role: 'assistant',
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error("Chat error:", error);
-      // Fallback response on error
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: "I apologize, but I'm having trouble connecting right now. Please try again in a moment.",
-        role: 'assistant',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
+      console.error("Send error:", error);
       setIsTyping(false);
     }
   };
@@ -133,109 +241,156 @@ export default function ChatBox({
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[hsl(220,71%,38%)]">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">AI Assistant</h2>
-                <p className="text-xs text-gray-500">
-                  {contextType === "session" ? "Session Coach" : "Always here to help"}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-semibold text-gray-900 truncate">
+                  {showHistory ? "Chat History" : (conversationId ? "Active Chat" : "New Chat")}
+                </h2>
+                <p className="text-xs text-gray-500 truncate">
+                  {contextType === "session" ? "Session Coach" : "General Assistant"}
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
-              aria-label="Close chat"
-            >
-              <X className="h-4 w-4 text-gray-500" />
-            </button>
-          </div>
-
-          {/* Messages Container */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-gray-50">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            <div className="flex items-center gap-1">
+              {!showHistory ? (
+                <button
+                  onClick={handleOpenHistory}
+                  className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                  title="View History"
+                >
+                  <Clock className="h-4 w-4 text-gray-500" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                  title="Back to Chat"
+                >
+                  <MessageSquare className="h-4 w-4 text-gray-500" />
+                </button>
+              )}
+              <button
+                onClick={startNewChat}
+                className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                title="New Chat"
               >
-                {message.role === "assistant" && (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(220,71%,38%)] flex-shrink-0">
-                    <Sparkles className="h-3.5 w-3.5 text-white" />
-                  </div>
-                )}
-
-                <div className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"} max-w-[75%]`}>
-                  <div
-                    className={`rounded-2xl px-3 py-2 ${message.role === "user"
-                        ? "bg-[hsl(220,71%,38%)] text-white"
-                        : "bg-white border border-gray-200 text-gray-900"
-                      }`}
-                  >
-                    <p className="text-sm leading-relaxed whitespace-pre-line">{message.content}</p>
-                  </div>
-                  <span className="text-xs text-gray-500 mt-1 px-1">{formatTime(message.timestamp)}</span>
-                </div>
-
-                {message.role === "user" && (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 flex-shrink-0">
-                    <User className="h-3.5 w-3.5 text-gray-600" />
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {isTyping && (
-              <div className="flex gap-2 justify-start">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(220,71%,38%)] flex-shrink-0">
-                  <Sparkles className="h-3.5 w-3.5 text-white" />
-                </div>
-                <div className="bg-white border border-gray-200 rounded-2xl px-3 py-2">
-                  <div className="flex gap-1">
-                    <div
-                      className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "0ms" }}
-                    />
-                    <div
-                      className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "150ms" }}
-                    />
-                    <div
-                      className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "300ms" }}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Area */}
-          <div className="border-t bg-white px-4 py-3 rounded-b-lg">
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
-                <Input
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder="Type your message..."
-                  className="h-10 bg-gray-50 border-gray-200 focus-visible:ring-[hsl(220,71%,38%)] resize-none rounded-lg text-sm"
-                  disabled={isTyping}
-                />
-              </div>
-              <Button
-                onClick={handleSend}
-                disabled={!inputValue.trim() || isTyping}
-                className="h-10 w-10 p-0 bg-[hsl(220,71%,38%)] hover:bg-[hsl(220,71%,32%)] text-white rounded-lg"
+                <Plus className="h-4 w-4 text-gray-500" />
+              </button>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                aria-label="Close chat"
               >
-                <Send className="h-4 w-4" />
-              </Button>
+                <X className="h-4 w-4 text-gray-500" />
+              </button>
             </div>
           </div>
+
+          {/* Content Area */}
+          <div className="flex-1 overflow-hidden bg-gray-50 relative flex flex-col">
+            {showHistory ? (
+              // History View
+              <div className="absolute inset-0 overflow-y-auto p-4 space-y-2">
+                {loadingHistory ? (
+                  <div className="flex justify-center p-4"><span className="text-sm text-gray-500">Loading history...</span></div>
+                ) : history.length === 0 ? (
+                  <div className="text-center p-8 text-gray-500 text-sm">No previous conversations found.</div>
+                ) : (
+                  history.map((conv) => (
+                    <button
+                      key={conv.id}
+                      onClick={() => loadConversation(conv)}
+                      className={`w-full text-left p-3 rounded-lg border transition-all ${conv.id === conversationId
+                          ? "bg-blue-50 border-blue-200 ring-1 ring-blue-100"
+                          : "bg-white border-gray-100 hover:border-blue-100 hover:shadow-sm"
+                        }`}
+                    >
+                      <h3 className="font-medium text-gray-900 text-sm truncate">{conv.title || "Untitled Chat"}</h3>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-xs text-gray-500 capitalize">{conv.context_type}</span>
+                        <span className="text-xs text-gray-400">{new Date(conv.updated_at).toLocaleDateString()}</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : (
+              // Chat Messages View
+              <div className="absolute inset-0 overflow-y-auto px-4 py-4 space-y-4">
+                {messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    {message.role === "assistant" && (
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(220,71%,38%)] flex-shrink-0">
+                        <Sparkles className="h-3.5 w-3.5 text-white" />
+                      </div>
+                    )}
+
+                    <div className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"} max-w-[85%]`}>
+                      <div
+                        className={`rounded-2xl px-3 py-2 ${message.role === "user"
+                          ? "bg-[hsl(220,71%,38%)] text-white"
+                          : "bg-white border border-gray-200 text-gray-900"
+                          }`}
+                      >
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                      </div>
+                      <span className="text-xs text-gray-500 mt-1 px-1">{formatTime(message.timestamp)}</span>
+                    </div>
+
+                    {message.role === "user" && (
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 flex-shrink-0">
+                        <User className="h-3.5 w-3.5 text-gray-600" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {isTyping && (
+                  <div className="flex gap-2 justify-start">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[hsl(220,71%,38%)] flex-shrink-0">
+                      <Sparkles className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-2xl px-3 py-2">
+                      <span className="text-xs text-gray-500 animate-pulse">Assistant is thinking...</span>
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Input Area (only in chat view) */}
+          {!showHistory && (
+            <div className="border-t bg-white px-4 py-3 rounded-b-lg">
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <Input
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    placeholder="Type your message..."
+                    className="h-10 bg-gray-50 border-gray-200 focus-visible:ring-[hsl(220,71%,38%)] resize-none rounded-lg text-sm"
+                    disabled={isTyping}
+                  />
+                </div>
+                <Button
+                  onClick={handleSend}
+                  disabled={!inputValue.trim() || isTyping}
+                  className="h-10 w-10 p-0 bg-[hsl(220,71%,38%)] hover:bg-[hsl(220,71%,32%)] text-white rounded-lg"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
     </>
