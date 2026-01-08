@@ -403,21 +403,21 @@ export default function ChatBox({
                           : "bg-white border border-gray-200 text-gray-900"
                           }`}
                       >
-                        <div className="max-w-full overflow-x-auto prose prose-sm prose-gray dark:prose-invert max-w-none">
+                        <div className="prose prose-sm prose-gray dark:prose-invert max-w-none break-words overflow-wrap-anywhere">
                           {message.role === 'assistant' ? (
                             <ReactMarkdown
                               components={{
-                                h1: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1">{children}</h3>,
-                                h2: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1">{children}</h3>,
-                                h3: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1">{children}</h4>,
-                                p: ({ children }) => <p className="text-sm leading-relaxed mb-2">{children}</p>,
+                                h1: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1 break-words">{children}</h3>,
+                                h2: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1 break-words">{children}</h3>,
+                                h3: ({ children }) => <h4 className="text-sm font-semibold mt-2 mb-1 break-words">{children}</h4>,
+                                p: ({ children }) => <p className="text-sm leading-relaxed mb-2 break-words">{children}</p>,
                                 ul: ({ children }) => <ul className="list-disc pl-4 mb-2 text-sm space-y-1">{children}</ul>,
                                 ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 text-sm space-y-1">{children}</ol>,
-                                li: ({ children }) => <li className="text-sm">{children}</li>,
-                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                blockquote: ({ children }) => <blockquote className="border-l-2 border-blue-400 pl-2 italic text-gray-600 my-2">{children}</blockquote>,
+                                li: ({ children }) => <li className="text-sm break-words">{children}</li>,
+                                strong: ({ children }) => <strong className="font-semibold break-words">{children}</strong>,
+                                blockquote: ({ children }) => <blockquote className="border-l-2 border-blue-400 pl-2 italic text-gray-600 my-2 break-words">{children}</blockquote>,
                                 hr: () => <hr className="my-3 border-gray-200" />,
-                                code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-xs">{children}</code>,
+                                code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-xs break-all">{children}</code>,
                               }}
                             >
                               {message.content}

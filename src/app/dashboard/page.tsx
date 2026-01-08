@@ -909,7 +909,10 @@ function DashboardContent() {
       </div>
 
       {/* ChatBox Component */}
-      <ChatBox />
+      <ChatBox
+        sessionId={selectedSessionId || undefined}
+        contextType={selectedSessionId ? "session" : "general"}
+      />
     </div>
   );
 }
