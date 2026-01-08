@@ -33,6 +33,7 @@ export class WebSocketClient {
     private ws: WebSocket | null = null;
     private handlers: MessageHandler[] = [];
     private url: string;
+    private messageQueue: any[] = [];
 
     constructor(token: string) {
         // Construct WS URL from current env or defaults
@@ -56,6 +57,11 @@ export class WebSocketClient {
 
         console.log('Connecting to WebSocket:', this.url);
         this.ws = new WebSocket(this.url);
+
+        this.ws.onopen = () => {
+            console.log('WebSocket connected');
+            this.flushQueue();
+        };
 
         this.ws.onmessage = (event) => {
             try {
@@ -86,7 +92,24 @@ export class WebSocketClient {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
         } else {
-            console.error('WebSocket not connected. State:', this.ws?.readyState);
+            console.log('Queueing message, state:', this.ws?.readyState);
+            this.messageQueue.push(data);
+            if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+                this.connect();
+            }
+        }
+    }
+
+    private flushQueue() {
+        while (this.messageQueue.length > 0) {
+            const data = this.messageQueue.shift();
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify(data));
+            } else {
+                // If closed again, push back and stop
+                this.messageQueue.unshift(data);
+                break;
+            }
         }
     }
 

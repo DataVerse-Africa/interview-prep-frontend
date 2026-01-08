@@ -199,13 +199,11 @@ export default function ChatBox({
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
 
-    if (!wsClient.current || !wsClient.current.isConnected()) {
-      // Try to reconnect
-      const token = apiClient.getToken();
-      if (token) {
-        wsClient.current = new WebSocketClient(token);
-        wsClient.current.connect();
-      }
+    if (!wsClient.current) return; // Should be initialized by useEffect
+
+    if (!wsClient.current.isConnected()) {
+      console.log("Reconnecting WS...");
+      wsClient.current.connect(); // Helper handles reconnection
     }
 
     const userMessage: Message = {
