@@ -95,6 +95,31 @@ export default function ChatBox({
         client.onMessage((data) => {
           if (data.type === 'status') {
             setIsTyping(data.status === 'thinking');
+          } else if (data.type === 'delta') {
+            setIsTyping(false);
+            if (responseTimeout.current) {
+              clearTimeout(responseTimeout.current);
+              responseTimeout.current = null;
+            }
+
+            setMessages(prev => {
+              const lastMsg = prev[prev.length - 1];
+              if (lastMsg && lastMsg.role === 'assistant') {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...lastMsg,
+                  content: lastMsg.content + data.content
+                };
+                return updated;
+              } else {
+                return [...prev, {
+                  id: Date.now().toString(),
+                  content: data.content,
+                  role: 'assistant',
+                  timestamp: new Date()
+                }];
+              }
+            });
           } else if (data.type === 'message') {
             setIsTyping(false);
             if (responseTimeout.current) {
@@ -102,13 +127,25 @@ export default function ChatBox({
               responseTimeout.current = null;
             }
 
-            const newMessage: Message = {
-              id: Date.now().toString(),
-              content: data.content,
-              role: data.role || 'assistant',
-              timestamp: new Date()
-            };
-            setMessages(prev => [...prev, newMessage]);
+            setMessages(prev => {
+              const lastMsg = prev[prev.length - 1];
+              // If we were streaming, update the last message with final content
+              if (lastMsg && lastMsg.role === 'assistant') {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...lastMsg,
+                  content: data.content // Ensure final consistency
+                };
+                return updated;
+              } else {
+                return [...prev, {
+                  id: Date.now().toString(),
+                  content: data.content,
+                  role: data.role || 'assistant',
+                  timestamp: new Date()
+                }];
+              }
+            });
 
             // Capture conversation ID if newly created
             if (data.conversation_id) {
