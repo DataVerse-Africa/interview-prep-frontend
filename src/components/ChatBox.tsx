@@ -66,6 +66,7 @@ export default function ChatBox({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsClient = useRef<WebSocketClient | null>(null);
   const mounted = useRef(false);
+  const responseTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Scroll to bottom
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function ChatBox({
     return () => {
       mounted.current = false;
       wsClient.current?.disconnect();
+      if (responseTimeout.current) clearTimeout(responseTimeout.current);
     };
   }, []);
 
@@ -95,6 +97,11 @@ export default function ChatBox({
             setIsTyping(data.status === 'thinking');
           } else if (data.type === 'message') {
             setIsTyping(false);
+            if (responseTimeout.current) {
+              clearTimeout(responseTimeout.current);
+              responseTimeout.current = null;
+            }
+
             const newMessage: Message = {
               id: Date.now().toString(),
               content: data.content,
@@ -115,6 +122,11 @@ export default function ChatBox({
             }
           } else if (data.type === 'error') {
             setIsTyping(false);
+            if (responseTimeout.current) {
+              clearTimeout(responseTimeout.current);
+              responseTimeout.current = null;
+            }
+
             const errorMessage: Message = {
               id: Date.now().toString(),
               content: `Error: ${data.content}`,
@@ -149,6 +161,11 @@ export default function ChatBox({
   };
 
   const loadConversation = async (summary: ConversationSummary) => {
+    setIsTyping(false); // Reset stuck state
+    if (responseTimeout.current) {
+      clearTimeout(responseTimeout.current);
+      responseTimeout.current = null;
+    }
     try {
       // Load messages
       const msgs = await chatApi.getConversationMessages(summary.id);
@@ -172,6 +189,11 @@ export default function ChatBox({
     setMessages(INITIAL_MESSAGES);
     setConversationId(null);
     setShowHistory(false);
+    setIsTyping(false);
+    if (responseTimeout.current) {
+      clearTimeout(responseTimeout.current);
+      responseTimeout.current = null;
+    }
   };
 
   const handleSend = async () => {
@@ -183,7 +205,6 @@ export default function ChatBox({
       if (token) {
         wsClient.current = new WebSocketClient(token);
         wsClient.current.connect();
-        // Wait a bit? For now, simplistic fallback
       }
     }
 
@@ -197,6 +218,19 @@ export default function ChatBox({
     setMessages(prev => [...prev, userMessage]);
     setInputValue("");
     setIsTyping(true);
+
+    // Timeout implementation
+    if (responseTimeout.current) clearTimeout(responseTimeout.current);
+    responseTimeout.current = setTimeout(() => {
+      setIsTyping(false);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        content: "Something went wrong. Please try again later.",
+        role: 'assistant',
+        timestamp: new Date()
+      }]);
+      responseTimeout.current = null;
+    }, 60000);
 
     try {
       // Build previous history for context if needed (not strictly needed with conversation_id)
@@ -218,6 +252,7 @@ export default function ChatBox({
     } catch (error) {
       console.error("Send error:", error);
       setIsTyping(false);
+      if (responseTimeout.current) clearTimeout(responseTimeout.current);
     }
   };
 
@@ -300,8 +335,8 @@ export default function ChatBox({
                       key={conv.id}
                       onClick={() => loadConversation(conv)}
                       className={`w-full text-left p-3 rounded-lg border transition-all ${conv.id === conversationId
-                          ? "bg-blue-50 border-blue-200 ring-1 ring-blue-100"
-                          : "bg-white border-gray-100 hover:border-blue-100 hover:shadow-sm"
+                        ? "bg-blue-50 border-blue-200 ring-1 ring-blue-100"
+                        : "bg-white border-gray-100 hover:border-blue-100 hover:shadow-sm"
                         }`}
                     >
                       <h3 className="font-medium text-gray-900 text-sm truncate">{conv.title || "Untitled Chat"}</h3>
@@ -378,7 +413,7 @@ export default function ChatBox({
                     }}
                     placeholder="Type your message..."
                     className="h-10 bg-gray-50 border-gray-200 focus-visible:ring-[hsl(220,71%,38%)] resize-none rounded-lg text-sm"
-                    disabled={isTyping}
+                    disabled={false}
                   />
                 </div>
                 <Button
