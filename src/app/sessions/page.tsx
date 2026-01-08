@@ -262,10 +262,41 @@ function SessionsContent() {
 
     if (!user?.user_id || !selectedSession) return;
 
-    // Check if all questions have answers
-    const missingAnswers = filteredQuestions.filter(q => !answers[q.id]?.text && q.id !== filteredQuestions[currentQuestionIndex].id && !currentAnswerText);
+    // Minimum character requirement per answer
+    const MIN_ANSWER_LENGTH = 10;
 
-    if (missingAnswers.length > 0 && !confirm(`You have ${missingAnswers.length} unanswered questions. Are you sure you want to submit?`)) {
+    // Build final answers map including current answer
+    const finalAnswers: Record<string, { text: string; timeTaken: number }> = { ...answers };
+    const currentQ = filteredQuestions[currentQuestionIndex];
+    if (currentQ) {
+      const timeTaken = timeStarted
+        ? Math.floor((new Date().getTime() - timeStarted.getTime()) / 1000)
+        : 0;
+      finalAnswers[currentQ.id] = {
+        text: currentAnswerText,
+        timeTaken: (finalAnswers[currentQ.id]?.timeTaken || 0) + timeTaken
+      };
+    }
+
+    // Validate that all answers meet minimum length requirement
+    const shortAnswers = filteredQuestions.filter(q => {
+      const answerText = finalAnswers[q.id]?.text || "";
+      return answerText.trim().length < MIN_ANSWER_LENGTH;
+    });
+
+    if (shortAnswers.length > 0) {
+      toast.error(
+        `Please provide at least ${MIN_ANSWER_LENGTH} characters for each answer. ${shortAnswers.length} question(s) need more content.`
+      );
+      // Navigate to the first question with insufficient answer
+      const firstShortIndex = filteredQuestions.findIndex(q => {
+        const answerText = finalAnswers[q.id]?.text || "";
+        return answerText.trim().length < MIN_ANSWER_LENGTH;
+      });
+      if (firstShortIndex >= 0) {
+        setCurrentQuestionIndex(firstShortIndex);
+        setCurrentAnswerText(finalAnswers[filteredQuestions[firstShortIndex].id]?.text || "");
+      }
       return;
     }
 
@@ -655,7 +686,7 @@ function SessionsContent() {
                     </p>
                   </div>
 
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex gap-3 pt-4 pb-4 px-4 mb-2">
                     <Button
                       variant="outline"
                       onClick={handlePreviousQuestion}
