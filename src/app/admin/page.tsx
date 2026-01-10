@@ -46,10 +46,15 @@ import {
   SystemHealthMetrics,
   AdminDashboardCharts,
   AdminUserDetails,
+  VectorDBStats,
+  VectorDBQueryResult,
 } from "@/lib/api/admin";
 import { ApiClientError } from "@/lib/api/client";
 import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { FileUp, Database, Search as SearchIcon, Trash2, RefreshCw } from "lucide-react";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -63,6 +68,15 @@ export default function AdminPage() {
   const [systemHealth, setSystemHealth] = useState<SystemHealthMetrics | null>(null);
   const [charts, setCharts] = useState<AdminDashboardCharts | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
+  
+  // Research State
+  const [vectorDBStats, setVectorDBStats] = useState<VectorDBStats | null>(null);
+  const [queryResults, setQueryResults] = useState<VectorDBQueryResult[]>([]);
+  const [researchQuery, setResearchQuery] = useState("");
+  const [keywordForm, setKeywordForm] = useState({ keywords: "", role: "", topic: "" });
+  const [uploadForm, setUploadForm] = useState({ file: null as File | null, role: "", topic: "", tags: "" });
+  const [isResearchLoading, setIsResearchLoading] = useState(false);
+
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,6 +146,11 @@ export default function AdminPage() {
         const usageData = await adminApi.getPeakUsageAnalytics().catch(() => null);
         if (usageData) setPeakUsage(usageData);
       }
+
+      if (activeTab === "research") {
+        const stats = await adminApi.getVectorDBStats().catch(() => null);
+        if (stats) setVectorDBStats(stats);
+      }
     } catch (error: any) {
       if (error instanceof ApiClientError) {
         if (error.status === 403 || error.status === 401) {
@@ -145,6 +164,92 @@ export default function AdminPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleKeywordSearch = async () => {
+    if (!keywordForm.keywords || !keywordForm.role || !keywordForm.topic) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    
+    try {
+      setIsResearchLoading(true);
+      const result = await adminApi.searchAndIndexKeywords(
+        keywordForm.keywords,
+        keywordForm.role,
+        keywordForm.topic
+      );
+      toast.success(`Indexed ${result.total_chunks_indexed} chunks from search results`);
+      // Refresh stats
+      const stats = await adminApi.getVectorDBStats();
+      setVectorDBStats(stats);
+      // Reset form
+      setKeywordForm({ keywords: "", role: "", topic: "" });
+    } catch (error: any) {
+      toast.error(error.message || "Keyword search failed");
+    } finally {
+      setIsResearchLoading(false);
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (!uploadForm.file) {
+      toast.error("Please select a file");
+      return;
+    }
+    
+    try {
+      setIsResearchLoading(true);
+      const result = await adminApi.uploadAndIndexDocument(
+        uploadForm.file,
+        uploadForm.role,
+        uploadForm.topic,
+        uploadForm.tags
+      );
+      toast.success(`Indexed ${result.total_chunks_indexed} chunks from document`);
+      // Refresh stats
+      const stats = await adminApi.getVectorDBStats();
+      setVectorDBStats(stats);
+      // Reset form
+      setUploadForm({ file: null, role: "", topic: "", tags: "" });
+    } catch (error: any) {
+      toast.error(error.message || "File upload failed");
+    } finally {
+      setIsResearchLoading(false);
+    }
+  };
+
+  const handleVectorQuery = async () => {
+    if (!researchQuery) return;
+    
+    try {
+      setIsResearchLoading(true);
+      const results = await adminApi.queryVectorDB(researchQuery);
+      setQueryResults(results);
+    } catch (error: any) {
+      toast.error("Query failed");
+    } finally {
+      setIsResearchLoading(false);
+    }
+  };
+
+  const handleClearVectorDB = async () => {
+    if (!confirm("Are you sure you want to clear the ENTIRE vector database? This cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      setIsResearchLoading(true);
+      await adminApi.clearVectorDB();
+      toast.success("Vector database cleared");
+      const stats = await adminApi.getVectorDBStats();
+      setVectorDBStats(stats);
+      setQueryResults([]);
+    } catch (error: any) {
+      toast.error("Failed to clear vector database");
+    } finally {
+      setIsResearchLoading(false);
     }
   };
 
@@ -451,6 +556,9 @@ export default function AdminPage() {
             </TabsTrigger>
             <TabsTrigger value="usage" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
               Usage
+            </TabsTrigger>
+            <TabsTrigger value="research" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              Research
             </TabsTrigger>
           </TabsList>
 
@@ -906,6 +1014,231 @@ export default function AdminPage() {
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     No usage analytics available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="research" className="space-y-6">
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Stats Card */}
+              <Card className="col-span-1 shadow-lg border-indigo-200 dark:border-indigo-800">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Database className="h-5 w-5 text-indigo-600" />
+                    Vector DB Stats
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isResearchLoading && !vectorDBStats ? (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  ) : vectorDBStats ? (
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total Indexed Items</p>
+                        <p className="text-3xl font-bold text-indigo-900 dark:text-indigo-100">{vectorDBStats.total_items}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">By Content Type</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          {Object.entries(vectorDBStats.by_content_type).map(([type, count]) => (
+                            <div key={type} className="flex justify-between bg-muted p-2 rounded">
+                              <span className="capitalize">{type}</span>
+                              <span className="font-semibold">{count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full"
+                        onClick={async () => {
+                          const stats = await adminApi.getVectorDBStats();
+                          setVectorDBStats(stats);
+                        }}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh Stats
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        className="w-full mt-2"
+                        onClick={handleClearVectorDB}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Clear Database
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">Stats not available</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Actions Column */}
+              <div className="col-span-2 space-y-6">
+                {/* Keyword Search */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <SearchIcon className="h-5 w-5 text-blue-600" />
+                      Keyword Research & Indexing
+                    </CardTitle>
+                    <CardDescription>
+                      Search the web for keywords and index the results into the vector database.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Keywords (comma separated)</Label>
+                          <Input 
+                            placeholder="e.g. machine learning, system design" 
+                            value={keywordForm.keywords}
+                            onChange={(e) => setKeywordForm({...keywordForm, keywords: e.target.value})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Role Context</Label>
+                          <Input 
+                            placeholder="e.g. Software Engineer" 
+                            value={keywordForm.role}
+                            onChange={(e) => setKeywordForm({...keywordForm, role: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Topic Category</Label>
+                        <Input 
+                          placeholder="e.g. Technical Interview" 
+                          value={keywordForm.topic}
+                          onChange={(e) => setKeywordForm({...keywordForm, topic: e.target.value})}
+                        />
+                      </div>
+                      <Button 
+                        onClick={handleKeywordSearch} 
+                        disabled={isResearchLoading}
+                        className="w-full"
+                      >
+                        {isResearchLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <SearchIcon className="h-4 w-4 mr-2" />}
+                        Search & Index
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Document Upload */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileUp className="h-5 w-5 text-green-600" />
+                      Document Upload
+                    </CardTitle>
+                    <CardDescription>
+                      Upload PDF, DOCX, or TXT files to be indexed.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>File</Label>
+                          <Input 
+                            type="file" 
+                            onChange={(e) => setUploadForm({...uploadForm, file: e.target.files?.[0] || null})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Role Context</Label>
+                          <Input 
+                            placeholder="e.g. Product Manager" 
+                            value={uploadForm.role}
+                            onChange={(e) => setUploadForm({...uploadForm, role: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Topic</Label>
+                          <Input 
+                            placeholder="e.g. Behavioral Questions" 
+                            value={uploadForm.topic}
+                            onChange={(e) => setUploadForm({...uploadForm, topic: e.target.value})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Tags (comma separated)</Label>
+                          <Input 
+                            placeholder="e.g. guide, interview" 
+                            value={uploadForm.tags}
+                            onChange={(e) => setUploadForm({...uploadForm, tags: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={handleFileUpload} 
+                        disabled={isResearchLoading}
+                        variant="secondary"
+                        className="w-full"
+                      >
+                        {isResearchLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileUp className="h-4 w-4 mr-2" />}
+                        Upload & Index
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            {/* Query Tester */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5 text-purple-600" />
+                  Vector DB Semantic Search
+                </CardTitle>
+                <CardDescription>
+                  Test the retrieval system by running semantic queries.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4 mb-6">
+                  <Input 
+                    placeholder="Enter a query to test retrieval..." 
+                    value={researchQuery}
+                    onChange={(e) => setResearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleVectorQuery()}
+                  />
+                  <Button onClick={handleVectorQuery} disabled={isResearchLoading}>
+                    Search
+                  </Button>
+                </div>
+
+                {queryResults.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="font-semibold">Top Results</h3>
+                    <div className="grid gap-4">
+                      {queryResults.map((result, idx) => (
+                        <div key={idx} className="p-4 border rounded-lg bg-muted/30">
+                          <div className="flex justify-between items-start mb-2">
+                            <Badge variant="outline">{result.content_type || 'Unknown'}</Badge>
+                            <span className="text-sm font-mono text-muted-foreground">Score: {result.score.toFixed(4)}</span>
+                          </div>
+                          <p className="text-sm mb-2">{result.content}</p>
+                          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {result.role && <span>Role: {result.role}</span>}
+                            {result.topic && <span>Topic: {result.topic}</span>}
+                            {result.source && <span>Source: {result.source}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </CardContent>

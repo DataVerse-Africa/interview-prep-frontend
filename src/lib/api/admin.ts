@@ -144,6 +144,46 @@ export interface AdminUserDetails {
   }>;
 }
 
+export interface KeywordSearchResponse {
+  keywords_searched: string[];
+  total_search_results: number;
+  total_chunks_indexed: number;
+  role_context?: string;
+  topic?: string;
+  errors: string[];
+}
+
+export interface DocumentUploadResponse {
+  document_id: string;
+  filename: string;
+  content_type: string;
+  total_chunks_indexed: number;
+  word_count?: number;
+  role_context?: string;
+  topic?: string;
+  tags?: string[];
+  stored_path: string;
+}
+
+export interface VectorDBStats {
+  total_items: number;
+  by_content_type: Record<string, number>;
+  by_role: Record<string, number>;
+  by_topic: Record<string, number>;
+  ready: boolean;
+}
+
+export interface VectorDBQueryResult {
+  content: string;
+  score: number;
+  content_type?: string;
+  role?: string;
+  topic?: string;
+  source?: string;
+  url?: string;
+  title?: string;
+}
+
 export interface UserSessionAnalytics {
   user_id: string;
   total_sessions: number;
@@ -306,5 +346,42 @@ export const adminApi = {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('admin_token');
     }
+  },
+
+  // Research / Vector DB
+  searchAndIndexKeywords: async (keywords: string, role_context: string, topic: string): Promise<KeywordSearchResponse> => {
+    const formData = new FormData();
+    formData.append('keywords', keywords);
+    formData.append('role_context', role_context);
+    formData.append('topic', topic);
+    // Using 10 as default for max_results_per_keyword
+    formData.append('max_results_per_keyword', '10');
+    return apiClient.postFormData<KeywordSearchResponse>('/api/admin/research/keywords/search', formData);
+  },
+
+  uploadAndIndexDocument: async (file: File, role_context?: string, topic?: string, tags?: string): Promise<DocumentUploadResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (role_context) formData.append('role_context', role_context);
+    if (topic) formData.append('topic', topic);
+    if (tags) formData.append('tags', tags);
+    return apiClient.postFormData<DocumentUploadResponse>('/api/admin/research/documents/upload', formData);
+  },
+
+  getVectorDBStats: async (): Promise<VectorDBStats> => {
+    return apiClient.get<VectorDBStats>('/api/admin/research/vectordb/stats');
+  },
+
+  queryVectorDB: async (query: string, top_k: number = 10, role_filter?: string, topic_filter?: string): Promise<VectorDBQueryResult[]> => {
+    return apiClient.post<VectorDBQueryResult[]>('/api/admin/research/vectordb/query', {
+      query,
+      top_k,
+      role_filter,
+      topic_filter
+    });
+  },
+
+  clearVectorDB: async (): Promise<any> => {
+    return apiClient.delete<any>('/api/admin/research/vectordb/clear', { confirm: true });
   },
 };

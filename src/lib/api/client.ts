@@ -46,6 +46,7 @@ class ApiClient {
         this.token = token;
       } else {
         localStorage.removeItem('admin_token');
+        this.token = null;
       }
     }
   }
@@ -90,6 +91,7 @@ class ApiClient {
       this.setToken(null);
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('admin_token');
         localStorage.removeItem('user_data');
         localStorage.removeItem('session_data');
         // Dispatch event to notify auth context
@@ -159,15 +161,30 @@ class ApiClient {
     const url = `${this.baseUrl}${endpoint}`;
     const headers: HeadersInit = {};
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
+    const adminToken = this.getAdminToken();
+    const tokenToUse = adminToken || this.token;
+    if (tokenToUse) headers['Authorization'] = `Bearer ${tokenToUse}`;
 
     const response = await fetch(url, {
       method: 'POST',
       headers,
       body: formData,
     });
+
+    if (response.status === 401) {
+      this.setToken(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('user_data');
+        localStorage.removeItem('session_data');
+        window.dispatchEvent(new CustomEvent('auth:logout'));
+      }
+      throw new ApiClientError(401, {
+        error: 'unauthorized',
+        message: 'Session expired. Please sign in again.',
+      });
+    }
 
     if (!response.ok) {
       let errorData: ApiError;
@@ -205,15 +222,30 @@ class ApiClient {
     const url = `${this.baseUrl}${endpoint}`;
     const headers: HeadersInit = {};
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
+    const adminToken = this.getAdminToken();
+    const tokenToUse = adminToken || this.token;
+    if (tokenToUse) headers['Authorization'] = `Bearer ${tokenToUse}`;
 
     const response = await fetch(url, {
       method: 'PUT',
       headers,
       body: formData,
     });
+
+    if (response.status === 401) {
+      this.setToken(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('user_data');
+        localStorage.removeItem('session_data');
+        window.dispatchEvent(new CustomEvent('auth:logout'));
+      }
+      throw new ApiClientError(401, {
+        error: 'unauthorized',
+        message: 'Session expired. Please sign in again.',
+      });
+    }
 
     if (!response.ok) {
       let errorData: ApiError;
@@ -247,10 +279,17 @@ class ApiClient {
     return this.request<T>(endpoint, options);
   }
 
-  async delete<T = void>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+  async delete<T = void>(endpoint: string, data?: any): Promise<T> {
+    const options: RequestInit = {
+      method: 'DELETE',
+    };
+
+    if (data !== undefined && data !== null) {
+      options.body = JSON.stringify(data);
+    }
+
+    return this.request<T>(endpoint, options);
   }
 }
 
 export const apiClient = new ApiClient();
-
