@@ -144,6 +144,30 @@ export interface AdminUserDetails {
   }>;
 }
 
+export interface AdminSessionDayPreview {
+  day_number: number;
+  plan_date?: string | null;
+  total_questions: number;
+  answered_questions: number;
+}
+
+export interface AdminQuestionPreview {
+  question_id: string;
+  question_text: string;
+  difficulty: string;
+  topic: string;
+  subtopic?: string | null;
+  expected_answer: string;
+  evaluation_criteria: string[];
+  concepts_covered: string[];
+  estimated_time_minutes: number;
+  user_answer?: string | null;
+  user_score?: number | null;
+  time_taken_seconds?: number | null;
+  is_correct?: boolean | null;
+  user_feedback?: string | null;
+}
+
 export interface KeywordSearchResponse {
   keywords_searched: string[];
   total_search_results: number;
@@ -260,6 +284,22 @@ export const adminApi = {
   // Get user session analytics
   getUserSessionAnalytics: async (userId: string): Promise<UserSessionAnalytics> => {
     return apiClient.get<UserSessionAnalytics>(`/api/admin/users/${userId}/sessions`);
+  },
+
+  // List day numbers for a user's session
+  getUserSessionDays: async (userId: string, sessionId: string): Promise<AdminSessionDayPreview[]> => {
+    return apiClient.get<AdminSessionDayPreview[]>(`/api/admin/users/${userId}/sessions/${sessionId}/days`);
+  },
+
+  // Preview questions (and answers) for a specific day
+  getUserSessionDayQuestions: async (
+    userId: string,
+    sessionId: string,
+    dayNumber: number
+  ): Promise<AdminQuestionPreview[]> => {
+    return apiClient.get<AdminQuestionPreview[]>(
+      `/api/admin/users/${userId}/sessions/${sessionId}/days/${dayNumber}/questions`
+    );
   },
 
   // Get list of sessions
