@@ -9,6 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -44,6 +50,8 @@ import {
   Award,
   MessageSquare,
   Briefcase,
+  FileText,
+  Tag,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -1036,25 +1044,57 @@ export default function AdminPage() {
                             </div>
 
                             {questionsPreview.length ? (
-                              <div className="space-y-3">
-                                {questionsPreview.map((q) => (
-                                  <div key={q.question_id} className="p-3 border rounded-lg">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="font-medium flex-1">{q.question_text || "(No question text)"}</div>
-                                      <Badge variant="outline">{q.difficulty}</Badge>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground mt-1 flex gap-3 flex-wrap">
-                                      <span>Topic: {q.topic || "unknown"}</span>
-                                      {typeof q.user_score === "number" ? (
-                                        <span>Score: {(q.user_score * 100).toFixed(1)}%</span>
-                                      ) : null}
-                                      {typeof q.is_correct === "boolean" ? (
-                                        <span>{q.is_correct ? "Correct" : "Incorrect"}</span>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
+                              <Accordion type="single" collapsible className="w-full">
+                                {questionsPreview.map((q, idx) => {
+                                  const text = (q.question_text || "").trim();
+                                  return (
+                                    <AccordionItem key={q.question_id} value={q.question_id || String(idx)} className="border rounded-lg mb-2">
+                                      <AccordionTrigger className="px-3 py-3 hover:no-underline">
+                                        <div className="w-full">
+                                          <div className="flex items-start justify-between gap-3">
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                                                <FileText className="h-3.5 w-3.5" />
+                                                <span>Question {idx + 1}</span>
+                                              </div>
+                                              <div className="font-medium line-clamp-2">
+                                                {text || "(No question text)"}
+                                              </div>
+                                            </div>
+                                            <Badge variant="outline" className="shrink-0">{q.difficulty}</Badge>
+                                          </div>
+
+                                          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                            <span className="inline-flex items-center gap-1">
+                                              <Tag className="h-3.5 w-3.5" />
+                                              {q.topic || "unknown"}
+                                            </span>
+                                            {typeof q.user_score === "number" ? (
+                                              <span>Score: {(q.user_score * 100).toFixed(1)}%</span>
+                                            ) : null}
+                                            {typeof q.is_correct === "boolean" ? (
+                                              <span>{q.is_correct ? "Correct" : "Incorrect"}</span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      </AccordionTrigger>
+                                      <AccordionContent className="px-3">
+                                        <div className="rounded-md bg-muted/30 p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                                          {text || "(No question text)"}
+                                        </div>
+                                        {q.user_answer ? (
+                                          <div className="mt-3">
+                                            <div className="text-xs font-medium text-muted-foreground mb-1">User Answer</div>
+                                            <div className="rounded-md border p-3 text-sm leading-relaxed whitespace-pre-wrap">
+                                              {q.user_answer}
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                      </AccordionContent>
+                                    </AccordionItem>
+                                  );
+                                })}
+                              </Accordion>
                             ) : (
                               <div className="text-sm text-muted-foreground">No questions found for this day</div>
                             )}
