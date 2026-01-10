@@ -108,6 +108,7 @@ export interface TimeUsagePoint {
   date: string;
   active_users: number;
   hours_spent: number;
+  active_user_emails: string[];
 }
 
 export interface TimeUsageAnalytics {
@@ -376,8 +377,12 @@ export const adminApi = {
     return apiClient.get<PeakUsageAnalytics>('/api/admin/analytics/peak-usage');
   },
 
-  getTimeUsageAnalytics: async (): Promise<TimeUsageAnalytics> => {
-    return apiClient.get<TimeUsageAnalytics>('/api/admin/analytics/time-usage');
+  getTimeUsageAnalytics: async (
+    view: 'day' | 'week' | 'month' = 'day'
+  ): Promise<TimeUsageAnalytics> => {
+    return apiClient.get<TimeUsageAnalytics>(
+      `/api/admin/analytics/time-usage?view=${encodeURIComponent(view)}`
+    );
   },
 
   // Dashboard Charts

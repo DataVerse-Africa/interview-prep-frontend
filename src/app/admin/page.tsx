@@ -87,6 +87,7 @@ export default function AdminPage() {
   const [keywordAnalytics, setKeywordAnalytics] = useState<KeywordAnalytics[]>([]);
   const [peakUsage, setPeakUsage] = useState<PeakUsageAnalytics | null>(null);
   const [timeUsage, setTimeUsage] = useState<TimeUsageAnalytics | null>(null);
+  const [timeUsageView, setTimeUsageView] = useState<"day" | "week" | "month">("day");
   const [systemHealth, setSystemHealth] = useState<SystemHealthMetrics | null>(null);
   const [charts, setCharts] = useState<AdminDashboardCharts | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
@@ -126,7 +127,43 @@ export default function AdminPage() {
     }
 
     loadAdminData();
-  }, [router, currentPage, activeTab]);
+  }, [router, currentPage, activeTab, timeUsageView]);
+
+  const TimeUsageTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]?.payload as any;
+    const emails: string[] = Array.isArray(row?.active_user_emails) ? row.active_user_emails : [];
+    const shown = emails.slice(0, 8);
+    const remaining = Math.max(0, emails.length - shown.length);
+    return (
+      <div className="rounded-lg border bg-background p-3 shadow-sm">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="mt-2 space-y-1 text-sm">
+          <div className="flex justify-between gap-6">
+            <span className="text-muted-foreground">Active users</span>
+            <span className="font-semibold">{row?.active_users ?? 0}</span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span className="text-muted-foreground">Hours spent</span>
+            <span className="font-semibold">{Number(row?.hours_spent ?? 0).toFixed(2)}h</span>
+          </div>
+        </div>
+        {shown.length > 0 && (
+          <div className="mt-3">
+            <div className="text-xs font-medium text-muted-foreground mb-1">Users</div>
+            <div className="text-xs space-y-1">
+              {shown.map((e) => (
+                <div key={e} className="truncate">{e}</div>
+              ))}
+              {remaining > 0 && (
+                <div className="text-muted-foreground">+{remaining} more</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const loadAdminData = async () => {
     try {
@@ -175,7 +212,7 @@ export default function AdminPage() {
       if (activeTab === "usage") {
         const [usageData, timeUsageData] = await Promise.all([
           adminApi.getPeakUsageAnalytics().catch(() => null),
-          adminApi.getTimeUsageAnalytics().catch(() => null),
+          adminApi.getTimeUsageAnalytics(timeUsageView).catch(() => null),
         ]);
         if (usageData) setPeakUsage(usageData);
         if (timeUsageData) setTimeUsage(timeUsageData);
@@ -1245,6 +1282,33 @@ export default function AdminPage() {
                   </div>
                 ) : timeUsage ? (
                   <div className="space-y-6">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant={timeUsageView === "day" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setTimeUsageView("day")}
+                      >
+                        Day
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={timeUsageView === "week" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setTimeUsageView("week")}
+                      >
+                        Week
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={timeUsageView === "month" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setTimeUsageView("month")}
+                      >
+                        Month
+                      </Button>
+                    </div>
+
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="p-4 border rounded-lg">
                         <p className="text-sm text-muted-foreground">Cumulative Hours Spent</p>
@@ -1284,7 +1348,11 @@ export default function AdminPage() {
                           axisLine={false}
                           tickMargin={8}
                           minTickGap={24}
-                          tickFormatter={(v) => String(v).slice(5)}
+                          tickFormatter={(v) => {
+                            const s = String(v);
+                            if (timeUsageView === "month") return s.slice(0, 7);
+                            return s.slice(5);
+                          }}
                         />
                         <YAxis
                           yAxisId="left"
@@ -1301,7 +1369,7 @@ export default function AdminPage() {
                           tickMargin={8}
                           tickFormatter={(v) => `${Number(v).toFixed(0)}h`}
                         />
-                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartTooltip content={<TimeUsageTooltip />} />
                         <Line
                           yAxisId="left"
                           type="monotone"
