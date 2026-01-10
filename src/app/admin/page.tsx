@@ -9,6 +9,18 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   Users,
   BookOpen,
   Target,
@@ -38,7 +50,6 @@ import {
   adminApi,
   AdminSystemStats,
   UserListResponse,
-  QuestionPerformanceStats,
   TopicAnalytics,
   RoleAnalytics,
   KeywordAnalytics,
@@ -46,6 +57,8 @@ import {
   SystemHealthMetrics,
   AdminDashboardCharts,
   AdminUserDetails,
+  AdminSessionDayPreview,
+  AdminQuestionPreview,
   VectorDBStats,
   VectorDBQueryResult,
 } from "@/lib/api/admin";
@@ -60,7 +73,6 @@ export default function AdminPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<AdminSystemStats | null>(null);
   const [users, setUsers] = useState<UserListResponse | null>(null);
-  const [questionAnalytics, setQuestionAnalytics] = useState<QuestionPerformanceStats[]>([]);
   const [topicAnalytics, setTopicAnalytics] = useState<TopicAnalytics[]>([]);
   const [roleAnalytics, setRoleAnalytics] = useState<RoleAnalytics[]>([]);
   const [keywordAnalytics, setKeywordAnalytics] = useState<KeywordAnalytics[]>([]);
@@ -68,6 +80,14 @@ export default function AdminPage() {
   const [systemHealth, setSystemHealth] = useState<SystemHealthMetrics | null>(null);
   const [charts, setCharts] = useState<AdminDashboardCharts | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
+
+  // Questions drilldown state
+  const [questionsUser, setQuestionsUser] = useState<AdminUserDetails | null>(null);
+  const [questionsSessionId, setQuestionsSessionId] = useState<string | null>(null);
+  const [questionsDays, setQuestionsDays] = useState<AdminSessionDayPreview[]>([]);
+  const [questionsDayNumber, setQuestionsDayNumber] = useState<number | null>(null);
+  const [questionsPreview, setQuestionsPreview] = useState<AdminQuestionPreview[]>([]);
+  const [isQuestionsLoading, setIsQuestionsLoading] = useState(false);
   
   // Research State
   const [vectorDBStats, setVectorDBStats] = useState<VectorDBStats | null>(null);
@@ -123,8 +143,8 @@ export default function AdminPage() {
 
       // Load analytics tabs
       if (activeTab === "questions") {
-        const questionsData = await adminApi.getQuestionAnalytics(50).catch(() => null);
-        if (questionsData) setQuestionAnalytics(questionsData);
+        const usersData = await adminApi.getUsers(1, 200).catch(() => null);
+        if (usersData) setUsers(usersData);
       }
 
       if (activeTab === "topics") {
@@ -260,6 +280,59 @@ export default function AdminPage() {
       setActiveTab("users");
     } catch (error: any) {
       toast.error("Failed to load user details");
+    }
+  };
+
+  const handleSelectQuestionsUser = async (userId: string) => {
+    try {
+      setIsQuestionsLoading(true);
+      setQuestionsSessionId(null);
+      setQuestionsDays([]);
+      setQuestionsDayNumber(null);
+      setQuestionsPreview([]);
+
+      const userDetails = await adminApi.getUserDetails(userId);
+      setQuestionsUser(userDetails);
+    } catch (error: any) {
+      toast.error("Failed to load user details");
+    } finally {
+      setIsQuestionsLoading(false);
+    }
+  };
+
+  const handleSelectQuestionsSession = async (sessionId: string) => {
+    if (!questionsUser) return;
+    try {
+      setIsQuestionsLoading(true);
+      setQuestionsSessionId(sessionId);
+      setQuestionsDays([]);
+      setQuestionsDayNumber(null);
+      setQuestionsPreview([]);
+
+      const days = await adminApi.getUserSessionDays(questionsUser.user_id, sessionId);
+      setQuestionsDays(days);
+    } catch (error: any) {
+      toast.error("Failed to load session days");
+    } finally {
+      setIsQuestionsLoading(false);
+    }
+  };
+
+  const handleSelectQuestionsDay = async (dayNumber: number) => {
+    if (!questionsUser || !questionsSessionId) return;
+    try {
+      setIsQuestionsLoading(true);
+      setQuestionsDayNumber(dayNumber);
+      const preview = await adminApi.getUserSessionDayQuestions(
+        questionsUser.user_id,
+        questionsSessionId,
+        dayNumber
+      );
+      setQuestionsPreview(preview);
+    } catch (error: any) {
+      toast.error("Failed to load questions for day");
+    } finally {
+      setIsQuestionsLoading(false);
     }
   };
 
@@ -573,14 +646,30 @@ export default function AdminPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
-                      {charts.user_growth.slice(-7).map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">{item.date}</span>
-                          <span className="font-semibold">{item.count}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <ChartContainer
+                      className="h-[220px] w-full aspect-auto"
+                      config={{
+                        count: {
+                          label: "New users",
+                          color: "var(--color-chart-1)",
+                        },
+                      }}
+                    >
+                      <BarChart data={charts.user_growth.slice(-30)} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
+                        <CartesianGrid vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                          minTickGap={24}
+                          tickFormatter={(v) => String(v).slice(5)}
+                        />
+                        <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar dataKey="count" fill="var(--color-count)" radius={4} />
+                      </BarChart>
+                    </ChartContainer>
                   </CardContent>
                 </Card>
 
@@ -804,48 +893,171 @@ export default function AdminPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Target className="h-5 w-5" />
-                  Question Performance Analytics
+                  Questions (By User)
                 </CardTitle>
                 <CardDescription>
-                  Analytics on question performance across all users
+                  Select a user to view questions by session and day
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {isLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin" />
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div className="md:col-span-1">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search users..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2 max-h-[560px] overflow-auto pr-1">
+                      {isLoading ? (
+                        <div className="flex justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        </div>
+                      ) : filteredUsers.length > 0 ? (
+                        filteredUsers.map((u) => (
+                          <button
+                            key={u.user_id}
+                            onClick={() => handleSelectQuestionsUser(u.user_id)}
+                            className={`w-full text-left p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
+                              questionsUser?.user_id === u.user_id ? "bg-muted/60" : ""
+                            }`}
+                          >
+                            <div className="font-medium truncate">{u.email}</div>
+                            <div className="text-xs text-muted-foreground mt-1 flex gap-3">
+                              <span>Sessions: {u.total_sessions || 0}</span>
+                              <span>Qs: {u.total_questions_answered || 0}</span>
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">No users found</div>
+                      )}
+                    </div>
                   </div>
-                ) : questionAnalytics.length > 0 ? (
-                  <div className="space-y-3">
-                    {questionAnalytics.map((q) => (
-                      <div key={q.question_id} className="p-4 border rounded-lg">
-                        <div className="flex justify-between items-start mb-2">
-                          <p className="font-medium flex-1">{q.question_text}</p>
-                          <Badge variant="outline">{q.difficulty}</Badge>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">Times Answered</p>
-                            <p className="font-semibold">{q.times_answered}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Average Score</p>
-                            <p className="font-semibold">{q.average_score.toFixed(1)}%</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Correct Rate</p>
-                            <p className="font-semibold">{(q.correct_rate * 100).toFixed(1)}%</p>
-                          </div>
-                        </div>
-                        <Badge variant="secondary" className="mt-2">{q.topic}</Badge>
+
+                  <div className="md:col-span-2">
+                    {!questionsUser ? (
+                      <div className="text-center py-16 text-muted-foreground">
+                        Click a user to view their questions
                       </div>
-                    ))}
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold">{questionsUser.email}</div>
+                            <div className="text-sm text-muted-foreground">
+                              Sessions: {questionsUser.total_sessions} · Questions answered: {questionsUser.total_questions_answered}
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setQuestionsUser(null);
+                              setQuestionsSessionId(null);
+                              setQuestionsDays([]);
+                              setQuestionsDayNumber(null);
+                              setQuestionsPreview([]);
+                            }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+
+                        <div className="border rounded-lg p-4">
+                          <div className="font-medium mb-2">Sessions</div>
+                          {questionsUser.sessions?.length ? (
+                            <div className="flex flex-col gap-2">
+                              {questionsUser.sessions.map((s) => (
+                                <button
+                                  key={s.session_id}
+                                  onClick={() => handleSelectQuestionsSession(s.session_id)}
+                                  className={`text-left p-3 border rounded-lg hover:bg-muted/50 transition-colors ${
+                                    questionsSessionId === s.session_id ? "bg-muted/60" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="font-medium truncate">{s.session_name}</div>
+                                    <Badge variant="outline">{s.role || ""}</Badge>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Answered: {s.answered_questions}/{s.total_questions} · Avg score: {s.average_score ? `${s.average_score.toFixed(1)}%` : "N/A"}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-muted-foreground">No sessions found for this user</div>
+                          )}
+                        </div>
+
+                        {questionsSessionId && (
+                          <div className="border rounded-lg p-4">
+                            <div className="font-medium mb-2">Days</div>
+                            {isQuestionsLoading && questionsDays.length === 0 ? (
+                              <div className="flex justify-center py-6">
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                              </div>
+                            ) : questionsDays.length ? (
+                              <div className="flex flex-wrap gap-2">
+                                {questionsDays.map((d) => (
+                                  <Button
+                                    key={d.day_number}
+                                    variant={questionsDayNumber === d.day_number ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => handleSelectQuestionsDay(d.day_number)}
+                                  >
+                                    Day {d.day_number}{d.plan_date ? ` (${d.plan_date})` : ""}
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">No days found for this session</div>
+                            )}
+                          </div>
+                        )}
+
+                        {questionsDayNumber !== null && (
+                          <div className="border rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="font-medium">
+                                Questions — Day {questionsDayNumber}
+                              </div>
+                              {isQuestionsLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                            </div>
+
+                            {questionsPreview.length ? (
+                              <div className="space-y-3">
+                                {questionsPreview.map((q) => (
+                                  <div key={q.question_id} className="p-3 border rounded-lg">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="font-medium flex-1">{q.question_text || "(No question text)"}</div>
+                                      <Badge variant="outline">{q.difficulty}</Badge>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mt-1 flex gap-3 flex-wrap">
+                                      <span>Topic: {q.topic || "unknown"}</span>
+                                      {typeof q.user_score === "number" ? (
+                                        <span>Score: {(q.user_score * 100).toFixed(1)}%</span>
+                                      ) : null}
+                                      {typeof q.is_correct === "boolean" ? (
+                                        <span>{q.is_correct ? "Correct" : "Incorrect"}</span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">No questions found for this day</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No question analytics available
-                  </div>
-                )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
