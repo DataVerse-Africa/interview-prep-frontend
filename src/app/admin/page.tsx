@@ -14,9 +14,9 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   XAxis,
   YAxis,
 } from "recharts";
@@ -650,12 +650,12 @@ export default function AdminPage() {
                       className="h-[220px] w-full aspect-auto"
                       config={{
                         count: {
-                          label: "New users",
+                          label: "Total users",
                           color: "var(--color-chart-1)",
                         },
                       }}
                     >
-                      <BarChart data={charts.user_growth.slice(-30)} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
+                      <LineChart data={charts.user_growth.slice(-30)} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
                         <CartesianGrid vertical={false} />
                         <XAxis
                           dataKey="date"
@@ -667,8 +667,14 @@ export default function AdminPage() {
                         />
                         <YAxis tickLine={false} axisLine={false} tickMargin={8} allowDecimals={false} />
                         <ChartTooltip content={<ChartTooltipContent />} />
-                        <Bar dataKey="count" fill="var(--color-count)" radius={4} />
-                      </BarChart>
+                        <Line
+                          type="monotone"
+                          dataKey="count"
+                          stroke="var(--color-count)"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
                     </ChartContainer>
                   </CardContent>
                 </Card>
