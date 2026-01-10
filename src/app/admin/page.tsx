@@ -1350,7 +1350,7 @@ export default function AdminPage() {
                           minTickGap={24}
                           tickFormatter={(v) => {
                             const s = String(v);
-                            if (timeUsageView === "month") return s.slice(0, 7);
+                            if (timeUsageView === "day") return s.slice(-5);
                             return s.slice(5);
                           }}
                         />
