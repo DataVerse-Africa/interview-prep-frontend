@@ -538,7 +538,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-muted/50 p-1 overflow-x-auto">
+          <TabsList className="grid w-full grid-cols-7 bg-muted/50 p-1 overflow-x-auto">
             <TabsTrigger value="overview" className="data-[state=active]:bg-background data-[state=active]:shadow-sm">
               Overview
             </TabsTrigger>
