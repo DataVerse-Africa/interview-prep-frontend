@@ -104,6 +104,19 @@ export interface PeakUsageAnalytics {
   daily_distribution: Array<{ day: string; count: number }>;
 }
 
+export interface TimeUsagePoint {
+  date: string;
+  active_users: number;
+  hours_spent: number;
+}
+
+export interface TimeUsageAnalytics {
+  daily: TimeUsagePoint[];
+  total_hours_spent: number;
+  peak_hour: number;
+  peak_hour_hours: number;
+}
+
 export interface SystemHealthMetrics {
   database_status: 'healthy' | 'degraded' | 'down';
   api_response_time_ms: number;
@@ -361,6 +374,10 @@ export const adminApi = {
   // Peak Usage Analytics
   getPeakUsageAnalytics: async (): Promise<PeakUsageAnalytics> => {
     return apiClient.get<PeakUsageAnalytics>('/api/admin/analytics/peak-usage');
+  },
+
+  getTimeUsageAnalytics: async (): Promise<TimeUsageAnalytics> => {
+    return apiClient.get<TimeUsageAnalytics>('/api/admin/analytics/time-usage');
   },
 
   // Dashboard Charts

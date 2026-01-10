@@ -62,6 +62,7 @@ import {
   RoleAnalytics,
   KeywordAnalytics,
   PeakUsageAnalytics,
+  TimeUsageAnalytics,
   SystemHealthMetrics,
   AdminDashboardCharts,
   AdminUserDetails,
@@ -85,6 +86,7 @@ export default function AdminPage() {
   const [roleAnalytics, setRoleAnalytics] = useState<RoleAnalytics[]>([]);
   const [keywordAnalytics, setKeywordAnalytics] = useState<KeywordAnalytics[]>([]);
   const [peakUsage, setPeakUsage] = useState<PeakUsageAnalytics | null>(null);
+  const [timeUsage, setTimeUsage] = useState<TimeUsageAnalytics | null>(null);
   const [systemHealth, setSystemHealth] = useState<SystemHealthMetrics | null>(null);
   const [charts, setCharts] = useState<AdminDashboardCharts | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
@@ -171,8 +173,12 @@ export default function AdminPage() {
       }
 
       if (activeTab === "usage") {
-        const usageData = await adminApi.getPeakUsageAnalytics().catch(() => null);
+        const [usageData, timeUsageData] = await Promise.all([
+          adminApi.getPeakUsageAnalytics().catch(() => null),
+          adminApi.getTimeUsageAnalytics().catch(() => null),
+        ]);
         if (usageData) setPeakUsage(usageData);
+        if (timeUsageData) setTimeUsage(timeUsageData);
       }
 
       if (activeTab === "research") {
@@ -1222,6 +1228,107 @@ export default function AdminPage() {
           </TabsContent>
 
           <TabsContent value="usage" className="space-y-6">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Time Usage
+                </CardTitle>
+                <CardDescription>
+                  Daily active users vs hours spent (session duration)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                ) : timeUsage ? (
+                  <div className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="p-4 border rounded-lg">
+                        <p className="text-sm text-muted-foreground">Cumulative Hours Spent</p>
+                        <p className="text-2xl font-bold">
+                          {timeUsage.total_hours_spent.toFixed(1)}h
+                        </p>
+                      </div>
+                      <div className="p-4 border rounded-lg">
+                        <p className="text-sm text-muted-foreground">Peak Hour (by hours)</p>
+                        <p className="text-2xl font-bold">
+                          {timeUsage.peak_hour}:00
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {timeUsage.peak_hour_hours.toFixed(2)}h in last 30 days
+                        </p>
+                      </div>
+                    </div>
+
+                    <ChartContainer
+                      className="h-[260px] w-full aspect-auto"
+                      config={{
+                        active_users: {
+                          label: "Active users",
+                          color: "var(--color-chart-1)",
+                        },
+                        hours_spent: {
+                          label: "Hours spent",
+                          color: "var(--color-chart-2)",
+                        },
+                      }}
+                    >
+                      <LineChart data={timeUsage.daily} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
+                        <CartesianGrid vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                          minTickGap={24}
+                          tickFormatter={(v) => String(v).slice(5)}
+                        />
+                        <YAxis
+                          yAxisId="left"
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                          allowDecimals={false}
+                        />
+                        <YAxis
+                          yAxisId="right"
+                          orientation="right"
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                          tickFormatter={(v) => `${Number(v).toFixed(0)}h`}
+                        />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Line
+                          yAxisId="left"
+                          type="monotone"
+                          dataKey="active_users"
+                          stroke="var(--color-active_users)"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          yAxisId="right"
+                          type="monotone"
+                          dataKey="hours_spent"
+                          stroke="var(--color-hours_spent)"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ChartContainer>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No time usage analytics available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
