@@ -320,11 +320,15 @@ export default function AdminPage() {
       setDeleteUserTarget(null);
 
       // Refresh the users list AND the summary cards.
-      const [usersData, summaryData] = await Promise.all([
+      const [usersData, summaryData, topicsData, rolesData] = await Promise.all([
         adminApi.getUsers(currentPage, 50).catch(() => null),
         adminApi.getSummary().catch(() => null),
+        topicAnalytics ? adminApi.getTopicAnalytics().catch(() => null) : Promise.resolve(null),
+        roleAnalytics ? adminApi.getRoleAnalytics().catch(() => null) : Promise.resolve(null),
       ]);
       if (summaryData) setSummary(summaryData);
+      if (topicsData) setTopicAnalytics(topicsData);
+      if (rolesData) setRoleAnalytics(rolesData);
       if (usersData) {
         // If we deleted the last item on a page, step back a page.
         if (usersData.users.length === 0 && currentPage > 1) {
