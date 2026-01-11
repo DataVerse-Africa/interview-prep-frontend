@@ -147,9 +147,11 @@ function SessionsContent() {
 
       setCompletedDays(newCompletedDays);
       console.log("[Sessions] Loaded completed days:", Array.from(newCompletedDays));
+      return evaluations;
     } catch (error) {
       console.warn("[Sessions] Could not load completed days:", error);
       // Not critical - user can still use the app
+      return null;
     }
   };
 
@@ -372,10 +374,17 @@ function SessionsContent() {
       if (allDifficultiesComplete) {
         // Mark this day as fully completed
         setCompletedDays(prev => new Set([...prev, currentDay]));
-        toast.success(`Day ${currentDay} completed! Next day unlocks in 24 hours.`);
+        toast.success(`Day ${currentDay} completed!`);
 
         // Refresh backend day status/unlock times
-        await loadCompletedDaysFromBackend(selectedSession.id);
+        const evals = await loadCompletedDaysFromBackend(selectedSession.id);
+        const nextDay = currentDay + 1;
+        const nextSummary = (evals?.days || []).find(d => d.day_number === nextDay);
+        if (nextSummary?.status === "unlocked") {
+          toast.success(`Day ${nextDay} is now unlocked.`);
+        } else if (nextSummary?.unlocks_at) {
+          toast.info(`Day ${nextDay} unlocks in ${formatTimeUntil(nextSummary.unlocks_at)}.`);
+        }
       }
     } catch (error) {
       console.error("Error submitting answers:", error);
@@ -504,8 +513,10 @@ function SessionsContent() {
                                 : "bg-muted/30 text-muted-foreground/50 cursor-not-allowed"
                             }`}
                           title={
-                            isLocked && unlocksAt
-                              ? `Unlocks in ${formatTimeUntil(unlocksAt)}`
+                            isLocked
+                              ? (unlocksAt
+                                ? `Unlocks in ${formatTimeUntil(unlocksAt)}`
+                                : "Complete the previous day to unlock")
                               : undefined
                           }
                         >
@@ -515,7 +526,7 @@ function SessionsContent() {
                     })}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Next day unlocks 24h after completing the previous day
+                    New days unlock on schedule; finish previous to proceed
                   </p>
                 </CardContent>
               </Card>
