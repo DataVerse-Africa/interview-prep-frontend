@@ -318,7 +318,21 @@ export default function AdminPage() {
       toast.success("User deleted");
       setDeleteUserDialogOpen(false);
       setDeleteUserTarget(null);
-      await loadAdminData();
+
+      // Refresh the users list AND the summary cards.
+      const [usersData, summaryData] = await Promise.all([
+        adminApi.getUsers(currentPage, 50).catch(() => null),
+        adminApi.getSummary().catch(() => null),
+      ]);
+      if (summaryData) setSummary(summaryData);
+      if (usersData) {
+        // If we deleted the last item on a page, step back a page.
+        if (usersData.users.length === 0 && currentPage > 1) {
+          setCurrentPage((p) => Math.max(1, p - 1));
+        } else {
+          setUsers(usersData);
+        }
+      }
     } catch (error: any) {
       toast.error(error?.message || "Failed to delete user");
     } finally {
