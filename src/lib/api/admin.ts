@@ -339,6 +339,11 @@ export const adminApi = {
     return apiClient.post<void>(`/api/admin/users/${userId}/unblock`, {});
   },
 
+  // Delete user
+  deleteUser: async (userId: string): Promise<void> => {
+    return apiClient.delete<void>(`/api/admin/users/${userId}`);
+  },
+
   // Question Performance Analytics
   getQuestionAnalytics: async (
     limit: number = 50,

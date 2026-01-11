@@ -291,6 +291,21 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteUser = async (userId: string, email: string) => {
+    const ok = window.confirm(
+      `Delete user ${email}? This permanently removes their data.`
+    );
+    if (!ok) return;
+
+    try {
+      await adminApi.deleteUser(userId);
+      toast.success("User deleted");
+      await loadAdminData();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to delete user");
+    }
+  };
+
   const handleVectorQuery = async () => {
     if (!researchQuery) return;
     
@@ -823,6 +838,14 @@ export default function AdminPage() {
                             onClick={() => handleViewUser(userItem.user_id)}
                           >
                             View Details
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteUser(userItem.user_id, userItem.email)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
                           </Button>
                           {userItem.is_active ? (
                             <Button
