@@ -20,7 +20,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { sessionsApi } from "@/lib/api/sessions";
+import { sessionsApi, type SessionEvaluationDay } from "@/lib/api/sessions";
 import { questionsApi } from "@/lib/api/questions";
 import { evaluationsApi, DifficultyBucketEvaluationOut } from "@/lib/api/evaluations";
 import { ApiClientError } from "@/lib/api/client";
@@ -51,6 +51,9 @@ function SessionsContent() {
 
   // Track which days have been fully completed (all 3 difficulties done)
   const [completedDays, setCompletedDays] = useState<Set<number>>(new Set());
+
+  // Backend-authoritative day summaries (status, unlock times, completed difficulties)
+  const [daySummaries, setDaySummaries] = useState<SessionEvaluationDay[]>([]);
 
   // Track total number of practice days for this session
   const [totalPracticeDays, setTotalPracticeDays] = useState<number>(7);
@@ -118,6 +121,7 @@ function SessionsContent() {
   const loadCompletedDaysFromBackend = async (sessionId: string) => {
     try {
       const evaluations = await sessionsApi.getSessionEvaluations(sessionId);
+      setDaySummaries(evaluations.days || []);
       const newCompletedDays = new Set<number>();
 
       // Set total practice days from the API response
@@ -127,13 +131,16 @@ function SessionsContent() {
       }
 
       for (const day of evaluations.days) {
-        // Check if this day has all 3 difficulties answered
-        const difficulties = new Set(day.questions.filter(q => q.is_answered).map(q => q.difficulty.toLowerCase()));
-        const hasEasy = difficulties.has("easy");
-        const hasMedium = difficulties.has("medium");
-        const hasHard = difficulties.has("hard");
+        if (day.status === "completed") {
+          newCompletedDays.add(day.day_number);
+          continue;
+        }
 
-        if (hasEasy && hasMedium && hasHard) {
+        // Backward-compatible fallback if server doesn't provide status yet
+        const difficulties = new Set(
+          (day.questions || []).filter(q => q.is_answered).map(q => (q.difficulty || "").toLowerCase())
+        );
+        if (difficulties.has("easy") && difficulties.has("medium") && difficulties.has("hard")) {
           newCompletedDays.add(day.day_number);
         }
       }
@@ -144,6 +151,19 @@ function SessionsContent() {
       console.warn("[Sessions] Could not load completed days:", error);
       // Not critical - user can still use the app
     }
+  };
+
+  const getDaySummary = (dayNumber: number) => daySummaries.find(d => d.day_number === dayNumber);
+
+  const formatTimeUntil = (targetIso: string) => {
+    const target = new Date(targetIso);
+    const diffMs = target.getTime() - Date.now();
+    if (Number.isNaN(target.getTime()) || diffMs <= 0) return "now";
+    const diffMins = Math.ceil(diffMs / 60000);
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    if (hours <= 0) return `${mins}m`;
+    return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
   };
 
   const loadQuestionsForSession = async (sessionId: string, dayNumber: number) => {
@@ -158,6 +178,16 @@ function SessionsContent() {
       try {
         dailyPlan = await questionsApi.getQuestionsForSessionDay(sessionId, dayNumber);
       } catch (fetchError: any) {
+        if (fetchError instanceof ApiClientError && fetchError.status === 423) {
+          const unlocksAt = fetchError.data?.detail?.unlocks_at as string | undefined;
+          toast.error(
+            unlocksAt
+              ? `Day ${dayNumber} is locked. Unlocks in ${formatTimeUntil(unlocksAt)}.`
+              : `Day ${dayNumber} is locked. Complete the previous day to unlock.`
+          );
+          setIsLoading(false);
+          return;
+        }
         // If 404 or no questions, we'll generate them
         console.log("[Sessions] No existing questions found, will generate...");
         dailyPlan = null;
@@ -184,6 +214,14 @@ function SessionsContent() {
       setCurrentDay(dayNumber);
       setAnswers({}); // Reset answers for new session/day
       setTimeStarted(new Date());
+
+      // If server provided completed_difficulties, apply them on navigation
+      const summary = getDaySummary(dayNumber);
+      if (summary?.completed_difficulties) {
+        setCompletedDifficulties(new Set(summary.completed_difficulties.map(d => d.toLowerCase())));
+      } else {
+        setCompletedDifficulties(new Set());
+      }
     } catch (error) {
       console.error("Error loading questions:", error);
       toast.error("Failed to load questions");
@@ -334,16 +372,10 @@ function SessionsContent() {
       if (allDifficultiesComplete) {
         // Mark this day as fully completed
         setCompletedDays(prev => new Set([...prev, currentDay]));
-        toast.success(`Day ${currentDay} completed! 🎉`);
+        toast.success(`Day ${currentDay} completed! Next day unlocks in 24 hours.`);
 
-        // Pre-generate next day's questions in background (fire and forget)
-        const nextDay = currentDay + 1;
-
-        if (nextDay <= totalPracticeDays) {
-          questionsApi.generateQuestionsForSessionDay(selectedSession.id, nextDay)
-            .then(() => console.log(`[Sessions] Day ${nextDay} questions pre-generated`))
-            .catch((err) => console.warn(`[Sessions] Day ${nextDay} pre-generation failed:`, err));
-        }
+        // Refresh backend day status/unlock times
+        await loadCompletedDaysFromBackend(selectedSession.id);
       }
     } catch (error) {
       console.error("Error submitting answers:", error);
@@ -440,9 +472,14 @@ function SessionsContent() {
                     {Array.from({ length: totalPracticeDays }, (_, i) => i + 1).map((day) => {
                       const isCurrentDay = currentDay === day;
                       const isDayCompleted = completedDays.has(day);
-                      // Day 1 is always unlocked
-                      // Day N+1 only unlocks after Day N is fully completed (all 3 difficulties)
-                      const isUnlocked = day === 1 || completedDays.has(day - 1);
+                      const summary = getDaySummary(day);
+                      const status = summary?.status;
+                      const isLocked = status === "locked";
+                      // Backward-compatible fallback if status isn't present
+                      const isUnlocked = status
+                        ? status !== "locked"
+                        : (day === 1 || completedDays.has(day - 1));
+                      const unlocksAt = summary?.unlocks_at;
 
                       return (
                         <button
@@ -450,10 +487,10 @@ function SessionsContent() {
                           onClick={() => {
                             if (isUnlocked && selectedSession) {
                               setCurrentDay(day);
-                              // Don't reset if returning to a completed day
-                              if (!isDayCompleted) {
-                                setCompletedDifficulties(new Set());
-                              }
+                              // Reset + rehydrate completed difficulties for the selected day
+                              const completed = summary?.completed_difficulties || [];
+                              setCompletedDifficulties(new Set(completed.map(d => d.toLowerCase())));
+                              setBucketEvaluation(null);
                               loadQuestionsForSession(selectedSession.id, day);
                             }
                           }}
@@ -466,14 +503,19 @@ function SessionsContent() {
                                 ? "bg-muted hover:bg-muted/80 text-foreground"
                                 : "bg-muted/30 text-muted-foreground/50 cursor-not-allowed"
                             }`}
+                          title={
+                            isLocked && unlocksAt
+                              ? `Unlocks in ${formatTimeUntil(unlocksAt)}`
+                              : undefined
+                          }
                         >
-                          {isDayCompleted ? "✓" : day}
+                          {isDayCompleted ? "✓" : isLocked ? "🔒" : day}
                         </button>
                       );
                     })}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Complete all 3 difficulties to unlock the next day
+                    Next day unlocks 24h after completing the previous day
                   </p>
                 </CardContent>
               </Card>

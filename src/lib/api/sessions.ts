@@ -131,6 +131,11 @@ export interface SessionEvaluationQuestion {
 
 export interface SessionEvaluationDay {
   day_number: number;
+  status?: 'locked' | 'unlocked' | 'completed';
+  unlocks_at?: string | null;
+  completed_at?: string | null;
+  completed_difficulties?: string[];
+  is_generated?: boolean;
   total_questions: number;
   answered_questions: number;
   correct_answers: number;
