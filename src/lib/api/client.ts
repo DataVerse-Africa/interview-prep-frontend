@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://0.0.0.0:10000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
 
 export interface ApiError {
   error: string;
@@ -142,7 +142,8 @@ class ApiClient {
         url += `?${queryString}`;
       }
     }
-    return this.request<T>(url, { method: 'GET' });
+    // Avoid stale admin analytics from intermediary/browser caching.
+    return this.request<T>(url, { method: 'GET', cache: 'no-store' });
   }
 
   async post<T>(endpoint: string, data?: any): Promise<T> {
