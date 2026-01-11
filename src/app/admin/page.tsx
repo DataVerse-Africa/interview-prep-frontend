@@ -15,6 +15,16 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -91,6 +101,10 @@ export default function AdminPage() {
   const [systemHealth, setSystemHealth] = useState<SystemHealthMetrics | null>(null);
   const [charts, setCharts] = useState<AdminDashboardCharts | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserDetails | null>(null);
+
+  const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<{ userId: string; email: string } | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   // Questions drilldown state
   const [questionsUser, setQuestionsUser] = useState<AdminUserDetails | null>(null);
@@ -291,18 +305,24 @@ export default function AdminPage() {
     }
   };
 
-  const handleDeleteUser = async (userId: string, email: string) => {
-    const ok = window.confirm(
-      `Delete user ${email}? This permanently removes their data.`
-    );
-    if (!ok) return;
+  const openDeleteUserDialog = (userId: string, email: string) => {
+    setDeleteUserTarget({ userId, email });
+    setDeleteUserDialogOpen(true);
+  };
 
+  const confirmDeleteUser = async () => {
+    if (!deleteUserTarget) return;
     try {
-      await adminApi.deleteUser(userId);
+      setIsDeletingUser(true);
+      await adminApi.deleteUser(deleteUserTarget.userId);
       toast.success("User deleted");
+      setDeleteUserDialogOpen(false);
+      setDeleteUserTarget(null);
       await loadAdminData();
     } catch (error: any) {
       toast.error(error?.message || "Failed to delete user");
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -842,7 +862,7 @@ export default function AdminPage() {
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => handleDeleteUser(userItem.user_id, userItem.email)}
+                            onClick={() => openDeleteUserDialog(userItem.user_id, userItem.email)}
                           >
                             <Trash2 className="h-4 w-4 mr-1" />
                             Delete
@@ -902,6 +922,41 @@ export default function AdminPage() {
                 )}
               </CardContent>
             </Card>
+
+            <AlertDialog open={deleteUserDialogOpen} onOpenChange={setDeleteUserDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete user?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete
+                    {deleteUserTarget?.email ? ` ${deleteUserTarget.email}` : " this user"}
+                    {" "}and all associated data.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeletingUser}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void confirmDeleteUser();
+                    }}
+                    disabled={isDeletingUser}
+                  >
+                    {isDeletingUser ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Deleting…
+                      </>
+                    ) : (
+                      "Delete"
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {/* User Details Modal */}
             {selectedUser && (
