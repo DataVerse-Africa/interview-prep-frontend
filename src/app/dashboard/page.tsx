@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -16,33 +17,29 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  import {
-    User,
-    LogOut,
-    Target,
-    Clock,
-    TrendingUp,
-    Brain,
-    Sparkles,
-    CheckCircle2,
-    AlertTriangle,
-    ArrowUpRight,
-    ArrowDownRight,
-    ChevronRight,
-    BookOpen,
-    Plus,
-    Loader2,
-    Zap,
-    BarChart3,
-    Calendar as CalendarIcon,
-    MessageSquare,
-    Maximize2,
-    Minimize2,
-    GraduationCap,
-    Briefcase,
-    LineChart,
-    TrendingDown,
-  } from "lucide-react";
+  User,
+  LogOut,
+  Sparkles,
+  Plus,
+  Loader2,
+  Briefcase,
+  BookOpen,
+} from "lucide-react";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { alignmentApi } from "@/lib/api/alignment";
+import { dashboardApi } from "@/lib/api/dashboard";
+import { onboardingApi } from "@/lib/api/onboarding";
+import { sessionsApi } from "@/lib/api/sessions";
+import { usersApi } from "@/lib/api/users";
+import ChatBox from "@/components/ChatBox";
+
+function DashboardContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionIdFromUrl = searchParams?.get("session") || searchParams?.get("session_id");
+  const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
+
   const [sessionDetails, setSessionDetails] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -53,6 +50,9 @@ import {
   const [insightsData, setInsightsData] = useState<any>(null);
   const [userStats, setUserStats] = useState<any>(null);
   const [sessionStats, setSessionStats] = useState<any>(null);
+  const [alignmentData, setAlignmentData] = useState<any>(null);
+  const [alignmentScore, setAlignmentScore] = useState<number | null>(null);
+  const [onboardingData, setOnboardingData] = useState<any>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -62,7 +62,7 @@ import {
       return;
     }
 
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     const fetchSessions = async () => {
       try {
