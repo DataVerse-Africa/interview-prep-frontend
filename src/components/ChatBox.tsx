@@ -47,6 +47,19 @@ const formatTime = (date: Date): string => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+const LONG_MESSAGE_LINE_THRESHOLD = 12;
+const LONG_MESSAGE_CHAR_THRESHOLD = 900;
+
+const isLongAssistantMessage = (content: string): boolean => {
+  if (!content) return false;
+  const lineCount = content.split(/\r?\n/).length;
+  if (lineCount > LONG_MESSAGE_LINE_THRESHOLD) return true;
+  if (content.length > LONG_MESSAGE_CHAR_THRESHOLD) return true;
+  // Code fences tend to be visually tall even when not very long.
+  if ((content.match(/```/g) || []).length >= 2) return true;
+  return false;
+};
+
 export default function ChatBox({
   className = "",
   sessionId,
@@ -62,6 +75,9 @@ export default function ChatBox({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+
+  // UI State
+  const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({});
 
   // History State
   const [history, setHistory] = useState<ConversationSummary[]>([]);
@@ -211,6 +227,7 @@ export default function ChatBox({
       setMessages(formattedMessages);
       setConversationId(summary.id);
       setShowHistory(false);
+      setExpandedMessages({});
     } catch (error) {
       console.error("Failed to load conversation:", error);
     }
@@ -221,11 +238,19 @@ export default function ChatBox({
     setConversationId(null);
     setShowHistory(false);
     setIsTyping(false);
+    setExpandedMessages({});
     streamingMessageId.current = null;
     if (responseTimeout.current) {
       clearTimeout(responseTimeout.current);
       responseTimeout.current = null;
     }
+  };
+
+  const toggleMessageExpanded = (messageId: string) => {
+    setExpandedMessages(prev => ({
+      ...prev,
+      [messageId]: !prev[messageId]
+    }));
   };
 
   const handleSend = async () => {
@@ -421,7 +446,20 @@ export default function ChatBox({
                           : "bg-white border border-gray-200 text-gray-900"
                           } overflow-hidden`}
                       >
-                        <div className="prose prose-sm prose-gray dark:prose-invert max-w-full break-words overflow-wrap-anywhere">
+                        {(() => {
+                          const isAssistant = message.role === "assistant";
+                          const isStreaming = isAssistant && streamingMessageId.current === message.id;
+                          const isLong = isAssistant && isLongAssistantMessage(message.content);
+                          const isExpandedMsg = Boolean(expandedMessages[message.id]);
+                          const shouldCollapse = isAssistant && isLong && !isExpandedMsg && !isStreaming;
+
+                          return (
+                            <div
+                              className={
+                                "prose prose-sm prose-gray dark:prose-invert max-w-full break-words overflow-wrap-anywhere " +
+                                (shouldCollapse ? "max-h-56 overflow-hidden" : "")
+                              }
+                            >
                           {message.role === 'assistant' ? (
                             <ReactMarkdown
                               components={{
@@ -462,8 +500,21 @@ export default function ChatBox({
                           ) : (
                             <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content}</p>
                           )}
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </div>
+
+                      {message.role === "assistant" && isLongAssistantMessage(message.content) && streamingMessageId.current !== message.id && (
+                        <button
+                          type="button"
+                          onClick={() => toggleMessageExpanded(message.id)}
+                          className="mt-1 px-1 text-xs font-medium text-[hsl(220,71%,38%)] hover:underline self-start"
+                        >
+                          {expandedMessages[message.id] ? "Show less" : "Show more"}
+                        </button>
+                      )}
+
                       <span className="text-xs text-gray-500 mt-1 px-1">{formatTime(message.timestamp)}</span>
                     </div>
 
