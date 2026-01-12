@@ -203,7 +203,55 @@ function DashboardContent() {
     };
   }, [selectedSessionId]);
 
-  const matchedSkills = alignmentData?.matched_items?.map((item: any) => item.skill || item.name) || [];
+  const matchedSkills = (() => {
+    const items = alignmentData?.matched_items || [];
+    const out: string[] = [];
+
+    for (const item of items) {
+      if (!item) continue;
+
+      if (typeof item === 'string') {
+        const v = item.trim();
+        if (v) out.push(v);
+        continue;
+      }
+
+      const resumeSnippet = (item.resume_snippet ?? item.resumeSnippet) as unknown;
+      const resumeContext = (item.resume_context ?? item.resumeContext) as any;
+      const resumeContextType = (resumeContext?.type ?? '') as string;
+
+      if (typeof resumeSnippet === 'string') {
+        const cleaned = resumeSnippet.replace(/^(Skill|Tool):\s*/i, '').trim();
+        const looksLikeSkillOrTool = /^(Skill|Tool):/i.test(resumeSnippet);
+        const contextSaysSkillOrTool = ['skill', 'tool'].includes(resumeContextType.toLowerCase());
+        if ((looksLikeSkillOrTool || contextSaysSkillOrTool) && cleaned) {
+          out.push(cleaned);
+          continue;
+        }
+      }
+
+      const direct = (item.skill ?? item.name ?? item.keyword) as unknown;
+      if (typeof direct === 'string' && direct.trim()) {
+        out.push(direct.trim());
+      }
+    }
+
+    if (!out.length) {
+      const overlap = (alignmentData?.metrics?.keyword_overlap ?? []) as unknown;
+      if (Array.isArray(overlap)) {
+        for (const kw of overlap) {
+          if (typeof kw === 'string' && kw.trim()) out.push(kw.trim());
+        }
+      }
+    }
+
+    const uniq = new Map<string, string>();
+    for (const s of out) {
+      const key = s.toLowerCase();
+      if (!uniq.has(key)) uniq.set(key, s);
+    }
+    return Array.from(uniq.values()).sort((a, b) => a.localeCompare(b));
+  })();
   const missingSkills = alignmentData?.gaps?.map((gap: any) => ({
     skill: gap.skill || gap.name || gap.requirement || (typeof gap === 'string' ? gap : 'Unknown'),
     priority: gap.priority || "medium" as "high" | "medium" | "low"
