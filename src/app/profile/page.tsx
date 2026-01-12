@@ -14,7 +14,6 @@ import {
   ArrowLeft,
   Loader2,
   Settings,
-  Shield,
   Clock,
   CheckCircle2
 } from "lucide-react";
@@ -37,14 +36,14 @@ export default function ProfilePage() {
   }, [authLoading, isAuthenticated, user, router]);
 
   useEffect(() => {
-    // Update session duration every minute
+    // Update session duration continuously (session starts at login)
     const updateDuration = () => {
       const duration = sessionManager.getSessionDuration();
       setSessionDuration(duration);
     };
 
     updateDuration();
-    const interval = setInterval(updateDuration, 60000);
+    const interval = setInterval(updateDuration, 5000);
 
     return () => clearInterval(interval);
   }, []);
@@ -200,19 +199,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex items-start gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-muted-foreground mb-1">
-                      User ID
-                    </div>
-                    <div className="text-base font-mono text-sm">
-                      {user.user_id}
-                    </div>
-                  </div>
-                </div>
+                {/* Intentionally not showing internal User ID */}
               </div>
 
               <div className="pt-4 border-t space-y-3">

@@ -16,34 +16,33 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  BookOpen,
-  LogOut,
-  User,
-  Loader2,
-  Shield,
-  Plus,
-  Calendar,
-  Sparkles,
-  Briefcase
-} from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { alignmentApi } from "@/lib/api/alignment";
-import { dashboardApi } from "@/lib/api/dashboard";
-import { onboardingApi } from "@/lib/api/onboarding";
-import { sessionsApi } from "@/lib/api/sessions";
-import { usersApi } from "@/lib/api/users";
-import { ApiClientError } from "@/lib/api/client";
-import { toast } from "sonner";
-import ChatBox from "@/components/ChatBox";
-
-function DashboardContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const sessionIdFromUrl = searchParams.get("session");
-  const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
-  const [alignmentScore, setAlignmentScore] = useState<number | null>(null);
-  const [alignmentData, setAlignmentData] = useState<any>(null);
-  const [onboardingData, setOnboardingData] = useState<any>(null);
+  import {
+    User,
+    LogOut,
+    Target,
+    Clock,
+    TrendingUp,
+    Brain,
+    Sparkles,
+    CheckCircle2,
+    AlertTriangle,
+    ArrowUpRight,
+    ArrowDownRight,
+    ChevronRight,
+    BookOpen,
+    Plus,
+    Loader2,
+    Zap,
+    BarChart3,
+    Calendar as CalendarIcon,
+    MessageSquare,
+    Maximize2,
+    Minimize2,
+    GraduationCap,
+    Briefcase,
+    LineChart,
+    TrendingDown,
+  } from "lucide-react";
   const [sessionDetails, setSessionDetails] = useState<any>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -310,11 +309,6 @@ function DashboardContent() {
             <Link href="/profile">
               <Button variant="ghost" size="icon" className="hover:bg-muted" title="Profile">
                 <User className="h-5 w-5" />
-              </Button>
-            </Link>
-            <Link href="/admin">
-              <Button variant="ghost" size="icon" className="hover:bg-muted" title="Admin">
-                <Shield className="h-5 w-5" />
               </Button>
             </Link>
             <Button variant="ghost" size="icon" onClick={logout} className="hover:bg-muted" title="Sign Out">

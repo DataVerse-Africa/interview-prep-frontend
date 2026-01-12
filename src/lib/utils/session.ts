@@ -17,12 +17,13 @@ export const sessionManager = {
   /**
    * Create a new session
    */
-  createSession: (sessionId: string, userId: string, expiresIn?: number): SessionData => {
+  createSession: (sessionId: string, userId: string, expiresIn?: number, createdAt?: number): SessionData => {
     const now = Date.now();
+    const createdAtMs = typeof createdAt === 'number' ? createdAt : now;
     const session: SessionData = {
       sessionId,
       userId,
-      createdAt: now,
+      createdAt: createdAtMs,
       lastActivity: now,
       expiresAt: expiresIn ? now + expiresIn : undefined,
     };

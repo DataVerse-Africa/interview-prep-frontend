@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { authApi, TokenResponse } from '@/lib/api/auth';
 import { apiClient } from '@/lib/api/client';
 import { useRouter } from 'next/navigation';
+import { sessionManager } from '@/lib/utils/session';
 
 interface AuthContextType {
   user: TokenResponse['user'] | null;
@@ -20,6 +21,7 @@ interface StoredUserData {
   user: TokenResponse['user'];
   token: string;
   expiresAt?: number;
+  loginAt?: number;
   lastActivity: number;
 }
 
@@ -69,6 +71,19 @@ const storage = {
   },
 };
 
+const ensureSession = (userId: string, loginAt?: number) => {
+  if (typeof window === 'undefined') return;
+
+  const existing = sessionManager.getSession();
+  if (existing && existing.userId === userId) return;
+
+  const sessionId =
+    (globalThis.crypto as any)?.randomUUID?.() ||
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  sessionManager.createSession(sessionId, userId, undefined, loginAt);
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<TokenResponse['user'] | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -113,8 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(storedData.user);
           apiClient.setToken(storedToken);
 
+          // Ensure session timer starts (or resumes) for this user
+          ensureSession(storedData.user.user_id, storedData.loginAt);
+
           // Update last activity
           storage.updateLastActivity();
+          sessionManager.updateActivity();
 
           // Verify token is still valid by trying to decode it
           try {
@@ -173,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const updateActivity = () => {
       storage.updateLastActivity();
+      sessionManager.updateActivity();
     };
 
     // Update activity on user interactions (throttled to once per minute)
@@ -201,6 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authApi.login({ email, password });
       const token = response.access_token;
+      const loginAt = Date.now();
 
       // Decode token to get expiration if available
       let expiresAt: number | undefined;
@@ -218,10 +239,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: response.user,
         token,
         expiresAt,
+        loginAt,
         lastActivity: Date.now(),
       };
       storage.setUserData(userData);
       localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+
+      ensureSession(response.user.user_id, loginAt);
 
       setToken(token);
       setUser(response.user);
@@ -236,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authApi.signup({ email, password });
       const token = response.access_token;
+      const loginAt = Date.now();
 
       // Decode token to get expiration if available
       let expiresAt: number | undefined;
@@ -253,10 +278,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: response.user,
         token,
         expiresAt,
+        loginAt,
         lastActivity: Date.now(),
       };
       storage.setUserData(userData);
       localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+
+      ensureSession(response.user.user_id, loginAt);
 
       setToken(token);
       setUser(response.user);
