@@ -12,7 +12,9 @@ import {
   Sparkles,
   Clock,
   Plus,
-  MessageSquare
+  MessageSquare,
+  Maximize2,
+  Minimize2
 } from "lucide-react";
 import { chatApi, ChatMessage as ApiChatMessage, WebSocketClient, ConversationSummary } from "@/lib/api/chat";
 import { apiClient } from "@/lib/api/client";
@@ -53,6 +55,7 @@ export default function ChatBox({
 }: ChatBoxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Chat State
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
@@ -303,7 +306,11 @@ export default function ChatBox({
       )}
 
       {isOpen && (
-        <Card className={`fixed bottom-6 right-6 w-[400px] h-[600px] flex flex-col shadow-2xl border-gray-200 z-50 animate-in slide-in-from-bottom-4 duration-300 ${className}`}>
+        <Card
+          className={`fixed bottom-6 right-6 flex flex-col shadow-2xl border-gray-200 z-50 animate-in slide-in-from-bottom-4 duration-300 max-w-[calc(100vw-3rem)] max-h-[calc(100vh-3rem)] ${
+            isExpanded ? "w-[560px] h-[720px]" : "w-[420px] h-[600px]"
+          } ${className}`}
+        >
           {/* Header */}
           <div className="border-b bg-white px-4 py-3 rounded-t-lg flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -320,6 +327,17 @@ export default function ChatBox({
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsExpanded(v => !v)}
+                className="h-8 w-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                title={isExpanded ? "Collapse" : "Expand"}
+              >
+                {isExpanded ? (
+                  <Minimize2 className="h-4 w-4 text-gray-500" />
+                ) : (
+                  <Maximize2 className="h-4 w-4 text-gray-500" />
+                )}
+              </button>
               {!showHistory ? (
                 <button
                   onClick={handleOpenHistory}
@@ -401,9 +419,9 @@ export default function ChatBox({
                         className={`rounded-2xl px-3 py-2 ${message.role === "user"
                           ? "bg-[hsl(220,71%,38%)] text-white"
                           : "bg-white border border-gray-200 text-gray-900"
-                          }`}
+                          } overflow-hidden`}
                       >
-                        <div className="prose prose-sm prose-gray dark:prose-invert max-w-none break-words overflow-wrap-anywhere">
+                        <div className="prose prose-sm prose-gray dark:prose-invert max-w-full break-words overflow-wrap-anywhere">
                           {message.role === 'assistant' ? (
                             <ReactMarkdown
                               components={{
@@ -417,7 +435,26 @@ export default function ChatBox({
                                 strong: ({ children }) => <strong className="font-semibold break-words">{children}</strong>,
                                 blockquote: ({ children }) => <blockquote className="border-l-2 border-blue-400 pl-2 italic text-gray-600 my-2 break-words">{children}</blockquote>,
                                 hr: () => <hr className="my-3 border-gray-200" />,
-                                code: ({ children }) => <code className="bg-gray-100 px-1 py-0.5 rounded text-xs break-all">{children}</code>,
+                                pre: ({ children }) => (
+                                  <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 my-2 text-xs leading-relaxed max-w-full overflow-x-auto">
+                                    {children}
+                                  </pre>
+                                ),
+                                code: ({ children, className, ...props }) => {
+                                  const isBlock = Boolean(className);
+                                  if (isBlock) {
+                                    return (
+                                      <code className="whitespace-pre" {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  }
+                                  return (
+                                    <code className="bg-gray-100 px-1 py-0.5 rounded text-xs break-words" {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                },
                               }}
                             >
                               {message.content}
