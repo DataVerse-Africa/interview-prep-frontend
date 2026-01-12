@@ -3,6 +3,7 @@ import { apiClient } from './client';
 export interface ChatMessage {
     role: 'user' | 'assistant';
     content: string;
+    created_at?: string | null;
 }
 
 export interface ConversationSummary {

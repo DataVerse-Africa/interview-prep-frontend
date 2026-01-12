@@ -152,6 +152,8 @@ export default function ChatBox({
               responseTimeout.current = null;
             }
 
+            const finalTimestamp = data.created_at ? new Date(data.created_at) : new Date();
+
             // Store conversation_id for future messages
             if (data.conversation_id) {
               setConversationId(prev => {
@@ -165,7 +167,21 @@ export default function ChatBox({
 
             // DON'T add the message again if we already streamed it
             if (streamingMessageId.current) {
+              const streamedId = streamingMessageId.current;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === streamedId ? { ...m, timestamp: finalTimestamp } : m))
+              );
               streamingMessageId.current = null; // Just clear the streaming state
+            } else if (data.content) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: Date.now().toString(),
+                  content: data.content,
+                  role: 'assistant',
+                  timestamp: finalTimestamp,
+                },
+              ]);
             }
           } else if (data.type === 'error') {
             setIsTyping(false);
@@ -217,12 +233,18 @@ export default function ChatBox({
       // Load messages
       const msgs = await chatApi.getConversationMessages(summary.id);
 
-      const formattedMessages: Message[] = msgs.map((m: ApiChatMessage, i: number) => ({
-        id: `${summary.id}-${i}`,
-        content: m.content,
-        role: m.role,
-        timestamp: new Date(summary.updated_at) // Approximate
-      }));
+        const formattedMessages: Message[] = msgs.map((m: ApiChatMessage, i: number) => {
+          const ts = m.created_at
+            ? new Date(m.created_at)
+            : new Date(summary.updated_at);
+
+          return {
+            id: `${summary.id}-${i}`,
+            content: m.content,
+            role: m.role,
+            timestamp: ts,
+          };
+        });
 
       setMessages(formattedMessages);
       setConversationId(summary.id);
