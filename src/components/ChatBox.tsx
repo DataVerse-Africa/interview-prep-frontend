@@ -275,15 +275,56 @@ export default function ChatBox({
     }));
   };
 
+  const sendViaRest = async (messageData: any) => {
+    try {
+      const response = await chatApi.sendMessage(messageData);
+      if (responseTimeout.current) {
+        clearTimeout(responseTimeout.current);
+        responseTimeout.current = null;
+      }
+      setIsTyping(false);
+
+      if (response.conversation_id) {
+        setConversationId(prev => {
+          if (!prev) {
+            fetchHistory();
+          }
+          return response.conversation_id || null;
+        });
+      }
+
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          content: response.response || "",
+          role: "assistant",
+          timestamp: new Date(),
+        }
+      ]);
+    } catch (error) {
+      console.error("REST send error:", error);
+      setIsTyping(false);
+      if (responseTimeout.current) {
+        clearTimeout(responseTimeout.current);
+        responseTimeout.current = null;
+      }
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          content: "Something went wrong. Please try again later.",
+          role: "assistant",
+          timestamp: new Date(),
+        }
+      ]);
+    }
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
 
-    if (!wsClient.current) return; // Should be initialized by useEffect
-
-    if (!wsClient.current.isConnected()) {
-      console.log("Reconnecting WS...");
-      wsClient.current.connect(); // Helper handles reconnection
-    }
+    const canUseWebSocket = Boolean(wsClient.current && wsClient.current.isConnected());
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -332,7 +373,11 @@ export default function ChatBox({
         messageData.conversation_id = conversationId;
       }
 
-      wsClient.current?.send(messageData);
+      if (canUseWebSocket) {
+        wsClient.current?.send(messageData);
+      } else {
+        await sendViaRest(messageData);
+      }
     } catch (error) {
       console.error("Send error:", error);
       setIsTyping(false);
