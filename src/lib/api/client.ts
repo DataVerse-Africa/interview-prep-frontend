@@ -1,4 +1,6 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://interview-prep-api.dataverseafrica.org';
+import { getApiBaseUrl } from './base-url';
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiError {
   error: string;

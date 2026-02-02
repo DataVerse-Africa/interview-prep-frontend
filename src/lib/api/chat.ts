@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { getWebSocketBaseUrl } from './base-url';
 
 export interface ChatMessage {
     role: 'user' | 'assistant';
@@ -38,7 +39,7 @@ export class WebSocketClient {
 
     constructor(token: string) {
         // Construct WS URL from current env or defaults
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
+        const apiBase = getWebSocketBaseUrl();
 
         // Handle http -> ws and https -> wss
         let wsProtocol = 'ws';
@@ -49,8 +50,7 @@ export class WebSocketClient {
             wsProtocol = 'wss';
         }
 
-        const wsBase = apiBase.replace(/^http(s)?/, 'ws$1');
-        this.url = `${wsBase}/api/chat/ws?token=${token}`;
+        this.url = `${apiBase}/api/chat/ws?token=${token}`;
     }
 
     connect() {
