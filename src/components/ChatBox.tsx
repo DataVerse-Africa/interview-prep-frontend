@@ -88,6 +88,7 @@ export default function ChatBox({
   const mounted = useRef(false);
   const responseTimeout = useRef<NodeJS.Timeout | null>(null);
   const streamingMessageId = useRef<string | null>(null);
+  const restStreamTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Scroll to bottom
   useEffect(() => {
@@ -103,10 +104,12 @@ export default function ChatBox({
       mounted.current = false;
       wsClient.current?.disconnect();
       if (responseTimeout.current) clearTimeout(responseTimeout.current);
+      if (restStreamTimeout.current) clearTimeout(restStreamTimeout.current);
     };
   }, []);
 
-  // Initialize WS when opening chat
+  // WebSocket temporarily disabled (MVP stability)
+  /*
   useEffect(() => {
     if (isOpen && !wsClient.current) {
       const token = apiClient.getToken();
@@ -205,6 +208,45 @@ export default function ChatBox({
       }
     }
   }, [isOpen]);
+  */
+
+  const streamRestResponse = (content: string, createdAt?: string | null) => {
+    if (!content) return;
+    const newId = Date.now().toString();
+    streamingMessageId.current = newId;
+
+    setMessages(prev => [
+      ...prev,
+      {
+        id: newId,
+        content: "",
+        role: "assistant",
+        timestamp: createdAt ? new Date(createdAt) : new Date(),
+      }
+    ]);
+
+    const chunkSize = 12;
+    let index = 0;
+
+    const pushChunk = () => {
+      if (!mounted.current) return;
+      index += chunkSize;
+      const nextContent = content.slice(0, index);
+
+      setMessages(prev =>
+        prev.map(m => (m.id === newId ? { ...m, content: nextContent } : m))
+      );
+
+      if (index < content.length) {
+        restStreamTimeout.current = setTimeout(pushChunk, 20);
+      } else {
+        streamingMessageId.current = null;
+        restStreamTimeout.current = null;
+      }
+    };
+
+    restStreamTimeout.current = setTimeout(pushChunk, 20);
+  };
 
   const fetchHistory = async () => {
     setLoadingHistory(true);
@@ -293,15 +335,19 @@ export default function ChatBox({
         });
       }
 
-      setMessages(prev => [
-        ...prev,
-        {
-          id: Date.now().toString(),
-          content: response.response || "",
-          role: "assistant",
-          timestamp: new Date(),
-        }
-      ]);
+      if (response.response) {
+        streamRestResponse(response.response);
+      } else {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            content: "",
+            role: "assistant",
+            timestamp: new Date(),
+          }
+        ]);
+      }
     } catch (error) {
       console.error("REST send error:", error);
       setIsTyping(false);
@@ -324,7 +370,7 @@ export default function ChatBox({
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
 
-    const canUseWebSocket = Boolean(wsClient.current && wsClient.current.isConnected());
+    const canUseWebSocket = false;
 
     const userMessage: Message = {
       id: Date.now().toString(),
