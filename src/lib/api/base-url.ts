@@ -1,9 +1,9 @@
-const DEFAULT_LOCAL_API_URL = 'http://localhost:10000';
+const DEFAULT_API_URL = 'https://interview-prep-api.dataverseafrica.org';
 
 const normalizeBaseUrl = (value: string): string => {
   let normalized = value.trim();
 
-  if (!normalized) return DEFAULT_LOCAL_API_URL;
+  if (!normalized) return DEFAULT_API_URL;
 
   if (normalized.startsWith('//')) {
     normalized = `https:${normalized}`;
@@ -12,16 +12,16 @@ const normalizeBaseUrl = (value: string): string => {
   }
 
   normalized = normalized.replace(/\/+$/, '');
-  return normalized || DEFAULT_LOCAL_API_URL;
+  return normalized || DEFAULT_API_URL;
 };
 
 export const getApiBaseUrl = (): string => {
   const raw = process.env.NEXT_PUBLIC_API_URL;
   if (!raw || raw.trim().length === 0) {
     if (typeof window !== 'undefined') {
-      console.warn('NEXT_PUBLIC_API_URL is not set; falling back to local API URL.');
+      console.warn('NEXT_PUBLIC_API_URL is not set; falling back to default production API URL.');
     }
-    return DEFAULT_LOCAL_API_URL;
+    return DEFAULT_API_URL;
   }
 
   return normalizeBaseUrl(raw);
