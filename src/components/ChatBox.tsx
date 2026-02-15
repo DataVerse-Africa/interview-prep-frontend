@@ -16,8 +16,8 @@ import {
   Maximize2,
   Minimize2
 } from "lucide-react";
-import { chatApi, ChatMessage as ApiChatMessage, WebSocketClient, ConversationSummary } from "@/lib/api/chat";
-import { apiClient } from "@/lib/api/client";
+import { chatApi, ChatMessage as ApiChatMessage, ConversationSummary } from "@/lib/api/chat";
+import { ApiClientError } from "@/lib/api/client";
 import ReactMarkdown from "react-markdown";
 
 interface Message {
@@ -82,9 +82,9 @@ export default function ChatBox({
   // History State
   const [history, setHistory] = useState<ConversationSummary[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const wsClient = useRef<WebSocketClient | null>(null);
   const mounted = useRef(false);
   const responseTimeout = useRef<NodeJS.Timeout | null>(null);
   const streamingMessageId = useRef<string | null>(null);
@@ -102,113 +102,20 @@ export default function ChatBox({
     mounted.current = true;
     return () => {
       mounted.current = false;
-      wsClient.current?.disconnect();
       if (responseTimeout.current) clearTimeout(responseTimeout.current);
       if (restStreamTimeout.current) clearTimeout(restStreamTimeout.current);
     };
   }, []);
 
-  // WebSocket temporarily disabled (MVP stability)
-  /*
-  useEffect(() => {
-    if (isOpen && !wsClient.current) {
-      const token = apiClient.getToken();
-      if (token) {
-        const client = new WebSocketClient(token);
-
-        client.onMessage((data) => {
-          if (data.type === 'status') {
-            setIsTyping(data.status === 'thinking');
-          } else if (data.type === 'delta') {
-            setIsTyping(false);
-            if (responseTimeout.current) {
-              clearTimeout(responseTimeout.current);
-              responseTimeout.current = null;
-            }
-
-            setMessages(prev => {
-              const lastMsg = prev[prev.length - 1];
-              // Check if we should append to existing streaming message
-              if (lastMsg && lastMsg.role === 'assistant' && streamingMessageId.current === lastMsg.id) {
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  ...lastMsg,
-                  content: lastMsg.content + data.content
-                };
-                return updated;
-              } else {
-                // Create new streaming message
-                const newId = Date.now().toString();
-                streamingMessageId.current = newId;
-                return [...prev, {
-                  id: newId,
-                  content: data.content,
-                  role: 'assistant',
-                  timestamp: new Date()
-                }];
-              }
-            });
-          } else if (data.type === 'message') {
-            setIsTyping(false);
-            if (responseTimeout.current) {
-              clearTimeout(responseTimeout.current);
-              responseTimeout.current = null;
-            }
-
-            const finalTimestamp = data.created_at ? new Date(data.created_at) : new Date();
-
-            // Store conversation_id for future messages
-            if (data.conversation_id) {
-              setConversationId(prev => {
-                if (!prev) {
-                  // If we just got a conversation ID, refresh history to show it eventually
-                  fetchHistory();
-                }
-                return data.conversation_id;
-              });
-            }
-
-            // DON'T add the message again if we already streamed it
-            if (streamingMessageId.current) {
-              const streamedId = streamingMessageId.current;
-              setMessages((prev) =>
-                prev.map((m) => (m.id === streamedId ? { ...m, timestamp: finalTimestamp } : m))
-              );
-              streamingMessageId.current = null; // Just clear the streaming state
-            } else if (data.content) {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: Date.now().toString(),
-                  content: data.content,
-                  role: 'assistant',
-                  timestamp: finalTimestamp,
-                },
-              ]);
-            }
-          } else if (data.type === 'error') {
-            setIsTyping(false);
-            if (responseTimeout.current) {
-              clearTimeout(responseTimeout.current);
-              responseTimeout.current = null;
-            }
-
-            const errorMessage: Message = {
-              id: Date.now().toString(),
-              content: `Error: ${data.content}`,
-              role: 'assistant',
-              timestamp: new Date()
-            };
-            setMessages(prev => [...prev, errorMessage]);
-          }
-        });
-
-        client.connect();
-        wsClient.current = client;
-      }
+  const getReadableError = (error: unknown): string => {
+    if (error instanceof ApiClientError) {
+      return error.data?.message || "Chat request failed.";
     }
-  }, [isOpen]);
-  */
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return "Something went wrong. Please try again later.";
+  };
 
   const streamRestResponse = (content: string, createdAt?: string | null) => {
     if (!content) return;
@@ -249,12 +156,14 @@ export default function ChatBox({
   };
 
   const fetchHistory = async () => {
+    setHistoryError(null);
     setLoadingHistory(true);
     try {
       const data = await chatApi.getHistory(contextType);
       setHistory(data);
     } catch (error) {
       console.error("Failed to load history:", error);
+      setHistoryError(getReadableError(error));
     } finally {
       setLoadingHistory(false);
     }
@@ -266,12 +175,19 @@ export default function ChatBox({
   };
 
   const loadConversation = async (summary: ConversationSummary) => {
+    setHistoryError(null);
     setIsTyping(false); // Reset stuck state
     if (responseTimeout.current) {
       clearTimeout(responseTimeout.current);
       responseTimeout.current = null;
     }
     try {
+      if (!summary.id || summary.id === "undefined" || summary.id === "null") {
+        throw new ApiClientError(400, {
+          error: "invalid_conversation_id",
+          message: "This conversation has an invalid id and cannot be opened.",
+        });
+      }
       // Load messages
       const msgs = await chatApi.getConversationMessages(summary.id);
 
@@ -294,6 +210,7 @@ export default function ChatBox({
       setExpandedMessages({});
     } catch (error) {
       console.error("Failed to load conversation:", error);
+      setHistoryError(getReadableError(error));
     }
   };
 
@@ -359,7 +276,7 @@ export default function ChatBox({
         ...prev,
         {
           id: Date.now().toString(),
-          content: "Something went wrong. Please try again later.",
+          content: getReadableError(error),
           role: "assistant",
           timestamp: new Date(),
         }
@@ -369,8 +286,6 @@ export default function ChatBox({
 
   const handleSend = async () => {
     if (!inputValue.trim() || isTyping) return;
-
-    const canUseWebSocket = false;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -419,11 +334,7 @@ export default function ChatBox({
         messageData.conversation_id = conversationId;
       }
 
-      if (canUseWebSocket) {
-        wsClient.current?.send(messageData);
-      } else {
-        await sendViaRest(messageData);
-      }
+      await sendViaRest(messageData);
     } catch (error) {
       console.error("Send error:", error);
       setIsTyping(false);
@@ -515,6 +426,11 @@ export default function ChatBox({
             {showHistory ? (
               // History View
               <div className="absolute inset-0 overflow-y-auto p-4 space-y-2">
+                {historyError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {historyError}
+                  </div>
+                )}
                 {loadingHistory ? (
                   <div className="flex justify-center p-4"><span className="text-sm text-gray-500">Loading history...</span></div>
                 ) : history.length === 0 ? (

@@ -1,5 +1,4 @@
 import { apiClient, ApiClientError, ApiError } from './client';
-import { getWebSocketBaseUrl } from './base-url';
 
 export interface ChatMessage {
     role: 'user' | 'assistant';
@@ -29,7 +28,6 @@ export interface ChatResponse {
     conversation_id?: string | null;
 }
 
-type MessageHandler = (message: any) => void;
 const CHAT_PROXY_BASE = '/api/proxy/chat';
 
 const getAuthToken = (): string | null => {
@@ -110,92 +108,6 @@ const proxyRequest = async <T>(endpoint: string, options: RequestInit = {}): Pro
     return {} as T;
 };
 
-export class WebSocketClient {
-    private ws: WebSocket | null = null;
-    private handlers: MessageHandler[] = [];
-    private url: string;
-    private messageQueue: any[] = [];
-
-    constructor(token: string) {
-        // Construct WS URL from current env or defaults
-        const apiBase = getWebSocketBaseUrl();
-
-        this.url = `${apiBase}/api/chat/ws?token=${token}`;
-    }
-
-    connect() {
-        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-
-        console.log('Connecting to WebSocket:', this.url);
-        this.ws = new WebSocket(this.url);
-
-        this.ws.onopen = () => {
-            console.log('WebSocket connected');
-            this.flushQueue();
-        };
-
-        this.ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                this.handlers.forEach(h => h(data));
-            } catch (e) {
-                console.error('WebSocket parse error:', e);
-            }
-        };
-
-        this.ws.onclose = () => {
-            console.log('WebSocket disconnected');
-        };
-
-        this.ws.onerror = (err) => {
-            console.error('WebSocket error:', err);
-        };
-    }
-
-    disconnect() {
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-        }
-    }
-
-    send(data: any) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(data));
-        } else {
-            console.log('Queueing message, state:', this.ws?.readyState);
-            this.messageQueue.push(data);
-            if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
-                this.connect();
-            }
-        }
-    }
-
-    private flushQueue() {
-        while (this.messageQueue.length > 0) {
-            const data = this.messageQueue.shift();
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(JSON.stringify(data));
-            } else {
-                // If closed again, push back and stop
-                this.messageQueue.unshift(data);
-                break;
-            }
-        }
-    }
-
-    onMessage(handler: MessageHandler) {
-        this.handlers.push(handler);
-        return () => {
-            this.handlers = this.handlers.filter(h => h !== handler);
-        };
-    }
-
-    isConnected(): boolean {
-        return this.ws?.readyState === WebSocket.OPEN;
-    }
-}
-
 export const chatApi = {
     getHistory: async (contextType?: string): Promise<ConversationSummary[]> => {
         const params = new URLSearchParams();
@@ -206,7 +118,21 @@ export const chatApi = {
     },
 
     getConversationMessages: async (conversationId: string): Promise<ChatMessage[]> => {
-        return proxyRequest<ChatMessage[]>(`${CHAT_PROXY_BASE}/history/${conversationId}`, { method: 'GET' });
+        const normalizedConversationId = conversationId?.trim();
+        if (
+            !normalizedConversationId ||
+            normalizedConversationId === 'undefined' ||
+            normalizedConversationId === 'null'
+        ) {
+            throw new ApiClientError(400, {
+                error: 'invalid_conversation_id',
+                message: 'Conversation id is invalid.',
+            });
+        }
+        return proxyRequest<ChatMessage[]>(
+            `${CHAT_PROXY_BASE}/history/${encodeURIComponent(normalizedConversationId)}`,
+            { method: 'GET' }
+        );
     },
 
     sendMessage: async (request: ChatRequest): Promise<ChatResponse> => {
