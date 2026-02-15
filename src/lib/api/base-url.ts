@@ -12,6 +12,10 @@ const normalizeBaseUrl = (value: string): string => {
   }
 
   normalized = normalized.replace(/\/+$/, '');
+
+  // Guard against common misconfiguration: setting NEXT_PUBLIC_API_URL with a trailing /api path.
+  // The API client already prefixes endpoints with /api.
+  normalized = normalized.replace(/\/api$/i, '');
   return normalized || DEFAULT_API_URL;
 };
 

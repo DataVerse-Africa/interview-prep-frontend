@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, ApiClientError, ApiError } from './client';
 import { getWebSocketBaseUrl } from './base-url';
 
 export interface ChatMessage {
@@ -30,6 +30,85 @@ export interface ChatResponse {
 }
 
 type MessageHandler = (message: any) => void;
+const CHAT_PROXY_BASE = '/api/proxy/chat';
+
+const getAuthToken = (): string | null => {
+    return apiClient.getAdminToken() || apiClient.getToken();
+};
+
+const normalizeHeaders = (headers?: HeadersInit): Record<string, string> => {
+    const normalized: Record<string, string> = {};
+    if (!headers) return normalized;
+
+    if (headers instanceof Headers) {
+        headers.forEach((value, key) => {
+            normalized[key] = value;
+        });
+        return normalized;
+    }
+
+    if (Array.isArray(headers)) {
+        headers.forEach(([key, value]) => {
+            normalized[key] = value;
+        });
+        return normalized;
+    }
+
+    return { ...headers };
+};
+
+const buildProxyHeaders = (headers?: HeadersInit): HeadersInit => {
+    const merged: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...normalizeHeaders(headers),
+    };
+
+    const token = getAuthToken();
+    if (token && !merged.Authorization) {
+        merged.Authorization = `Bearer ${token}`;
+    }
+
+    return merged;
+};
+
+const parseErrorResponse = async (response: Response): Promise<ApiError> => {
+    try {
+        const data = await response.json();
+        return {
+            error: data?.error || 'request_failed',
+            message: data?.message || data?.detail || `HTTP ${response.status}`,
+            detail: data?.detail,
+        };
+    } catch {
+        return {
+            error: 'request_failed',
+            message: `HTTP ${response.status}: ${response.statusText}`,
+        };
+    }
+};
+
+const proxyRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+    const response = await fetch(endpoint, {
+        ...options,
+        cache: options.cache || 'no-store',
+        headers: buildProxyHeaders(options.headers),
+    });
+
+    if (!response.ok) {
+        const errorData = await parseErrorResponse(response);
+        throw new ApiClientError(response.status, errorData);
+    }
+
+    if (response.status === 204) {
+        return {} as T;
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+        return response.json();
+    }
+    return {} as T;
+};
 
 export class WebSocketClient {
     private ws: WebSocket | null = null;
@@ -40,15 +119,6 @@ export class WebSocketClient {
     constructor(token: string) {
         // Construct WS URL from current env or defaults
         const apiBase = getWebSocketBaseUrl();
-
-        // Handle http -> ws and https -> wss
-        let wsProtocol = 'ws';
-        if (apiBase.startsWith('https')) {
-            wsProtocol = 'wss';
-        } else if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-            // Fallback: if frontend is https, assume wss needed if api base is relative or compatible
-            wsProtocol = 'wss';
-        }
 
         this.url = `${apiBase}/api/chat/ws?token=${token}`;
     }
@@ -130,15 +200,19 @@ export const chatApi = {
     getHistory: async (contextType?: string): Promise<ConversationSummary[]> => {
         const params = new URLSearchParams();
         if (contextType) params.append('context_type', contextType);
-        return apiClient.get<ConversationSummary[]>(`/api/chat/history?${params.toString()}`);
+        const query = params.toString();
+        const endpoint = query ? `${CHAT_PROXY_BASE}/history?${query}` : `${CHAT_PROXY_BASE}/history`;
+        return proxyRequest<ConversationSummary[]>(endpoint, { method: 'GET' });
     },
 
     getConversationMessages: async (conversationId: string): Promise<ChatMessage[]> => {
-        return apiClient.get<ChatMessage[]>(`/api/chat/history/${conversationId}`);
+        return proxyRequest<ChatMessage[]>(`${CHAT_PROXY_BASE}/history/${conversationId}`, { method: 'GET' });
     },
 
-    // Fallback/Legacy
     sendMessage: async (request: ChatRequest): Promise<ChatResponse> => {
-        return apiClient.post<ChatResponse>('/api/chat', request);
+        return proxyRequest<ChatResponse>(CHAT_PROXY_BASE, {
+            method: 'POST',
+            body: JSON.stringify(request),
+        });
     },
 };
