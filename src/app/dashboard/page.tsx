@@ -68,18 +68,25 @@ function DashboardContent() {
       try {
         setIsLoading(true);
         const userSessions = await dashboardApi.getUserSessions();
+        const normalizedSessions = (userSessions || []).filter((s: any) => !!s?.session_id);
         // Sort sessions by date (newest first)
-        const sortedSessions = userSessions.sort((a: any, b: any) =>
+        const sortedSessions = normalizedSessions.sort((a: any, b: any) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         setSessions(sortedSessions);
 
-        // Priority: 1) URL session param, 2) First session from list
-        // Always trust the URL param - it may be a newly created session not yet in list
-        if (sessionIdFromUrl) {
+        // Priority: 1) URL session param when present in fetched sessions, 2) first session.
+        const urlSessionExists =
+          !!sessionIdFromUrl && sortedSessions.some((s: any) => s.session_id === sessionIdFromUrl);
+
+        if (urlSessionExists && sessionIdFromUrl) {
           setSelectedSessionId(sessionIdFromUrl);
         } else if (sortedSessions.length > 0) {
-          setSelectedSessionId(sortedSessions[0].session_id);
+          const fallbackSessionId = sortedSessions[0].session_id;
+          setSelectedSessionId(fallbackSessionId);
+          if (sessionIdFromUrl && sessionIdFromUrl !== fallbackSessionId) {
+            router.replace(`/dashboard?session=${fallbackSessionId}`);
+          }
         } else {
           // No sessions and no URL param - stop loading
           setIsLoading(false);
@@ -109,7 +116,7 @@ function DashboardContent() {
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [user, router, authLoading, isAuthenticated]);
+  }, [user, router, authLoading, isAuthenticated, sessionIdFromUrl]);
 
   useEffect(() => {
     if (!selectedSessionId) return;

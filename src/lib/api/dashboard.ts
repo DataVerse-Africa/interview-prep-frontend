@@ -2,6 +2,7 @@ import { apiClient } from './client';
 
 export interface SessionSummary {
   session_id: string;
+  id?: string;
   session_name?: string | null;
   created_at: string;
   status: string;
@@ -17,7 +18,10 @@ export const dashboardApi = {
   getUserSessions: async (): Promise<SessionSummary[]> => {
     // New sessions endpoint returns { sessions: [], total: number }
     const response = await apiClient.get<{ sessions: SessionSummary[]; total: number }>(`/api/sessions`);
-    return response.sessions;
+    return (response.sessions || []).map((session: any) => ({
+      ...session,
+      session_id: session.session_id || session.id,
+    }));
   },
 
   // GET /api/sessions/{session_id} - user_id from JWT (updated endpoint)
@@ -25,28 +29,26 @@ export const dashboardApi = {
     return apiClient.get<any>(`/api/sessions/${sessionId}`);
   },
 
-  // GET /api/dashboard/performance - user_id from JWT
+  // Backend does not currently expose /api/dashboard/* endpoints.
+  // Return null to avoid guaranteed 404s until those routes exist.
   getUserPerformance: async (): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/performance`);
+    return null;
   },
 
-  // GET /api/dashboard/progress - user_id from JWT
   getUserProgress: async (): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/progress`);
+    return null;
   },
 
-  // GET /api/dashboard/insights - user_id from JWT
   getUserInsights: async (): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/insights`);
+    return null;
   },
 
-  // GET /api/dashboard/time-analytics - user_id from JWT
   getTimeAnalytics: async (): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/time-analytics`);
+    return null;
   },
 
-  // GET /api/dashboard/topic-analytics/{topic_name} - user_id from JWT
   getTopicAnalytics: async (topicName: string): Promise<any> => {
-    return apiClient.get<any>(`/api/dashboard/topic-analytics/${topicName}`);
+    void topicName;
+    return null;
   },
 };
