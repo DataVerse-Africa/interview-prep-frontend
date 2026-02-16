@@ -1,4 +1,5 @@
 import { apiClient, ApiClientError, ApiError } from './client';
+import { getApiBaseUrl } from './base-url';
 
 export interface ChatMessage {
     role: 'user' | 'assistant';
@@ -28,7 +29,11 @@ export interface ChatResponse {
     conversation_id?: string | null;
 }
 
-const CHAT_PROXY_BASE = '/api/proxy/chat';
+// Default to direct backend calls. Use proxy only when explicitly enabled.
+const CHAT_USE_PROXY = process.env.NEXT_PUBLIC_CHAT_USE_PROXY === 'true';
+const CHAT_API_BASE = CHAT_USE_PROXY
+    ? '/api/proxy/chat'
+    : `${getApiBaseUrl()}/api/chat`;
 
 const getAuthToken = (): string | null => {
     return apiClient.getAdminToken() || apiClient.getToken();
@@ -113,7 +118,7 @@ export const chatApi = {
         const params = new URLSearchParams();
         if (contextType) params.append('context_type', contextType);
         const query = params.toString();
-        const endpoint = query ? `${CHAT_PROXY_BASE}/history?${query}` : `${CHAT_PROXY_BASE}/history`;
+        const endpoint = query ? `${CHAT_API_BASE}/history?${query}` : `${CHAT_API_BASE}/history`;
         return proxyRequest<ConversationSummary[]>(endpoint, { method: 'GET' });
     },
 
@@ -130,13 +135,13 @@ export const chatApi = {
             });
         }
         return proxyRequest<ChatMessage[]>(
-            `${CHAT_PROXY_BASE}/history/${encodeURIComponent(normalizedConversationId)}`,
+            `${CHAT_API_BASE}/history/${encodeURIComponent(normalizedConversationId)}`,
             { method: 'GET' }
         );
     },
 
     sendMessage: async (request: ChatRequest): Promise<ChatResponse> => {
-        return proxyRequest<ChatResponse>(CHAT_PROXY_BASE, {
+        return proxyRequest<ChatResponse>(CHAT_API_BASE, {
             method: 'POST',
             body: JSON.stringify(request),
         });

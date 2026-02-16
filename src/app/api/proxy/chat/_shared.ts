@@ -29,6 +29,12 @@ export const relayUpstreamResponse = async (upstream: Response): Promise<NextRes
     responseHeaders.set('content-type', contentType);
   }
 
+  // Local debugging aid: expose which upstream URL the proxy actually called.
+  // This avoids confusion when browser DevTools only shows localhost /api/proxy/chat.
+  if (process.env.NODE_ENV !== 'production' && upstream.url) {
+    responseHeaders.set('x-chat-proxy-upstream-url', upstream.url);
+  }
+
   return new NextResponse(await upstream.text(), {
     status: upstream.status,
     headers: responseHeaders,
