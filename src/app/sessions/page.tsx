@@ -28,6 +28,21 @@ import { toast } from "sonner";
 import Link from "next/link";
 import ChatBox from "@/components/ChatBox";
 
+const MIN_ANSWER_CHARACTERS = 30;
+const MIN_ANSWER_WORDS = 10;
+const ANSWER_WORD_REGEX = /\b[\w'-]+\b/g;
+
+const getAnswerWordCount = (text: string): number => {
+  const matches = text.match(ANSWER_WORD_REGEX);
+  return matches ? matches.length : 0;
+};
+
+const isAnswerValid = (text: string): boolean => {
+  const trimmed = text.trim();
+  if (trimmed.length < MIN_ANSWER_CHARACTERS) return false;
+  return getAnswerWordCount(trimmed) >= MIN_ANSWER_WORDS;
+};
+
 function SessionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -277,6 +292,13 @@ function SessionsContent() {
   };
 
   const handleNextQuestion = () => {
+    if (!isAnswerValid(currentAnswerText)) {
+      toast.error(
+        `Please provide a meaningful answer before continuing (${MIN_ANSWER_WORDS}+ words and ${MIN_ANSWER_CHARACTERS}+ characters).`
+      );
+      return;
+    }
+
     saveCurrentAnswer();
 
     if (currentQuestionIndex < filteredQuestions.length - 1) {
@@ -303,9 +325,6 @@ function SessionsContent() {
 
     if (!user?.user_id || !selectedSession) return;
 
-    // Minimum character requirement per answer
-    const MIN_ANSWER_LENGTH = 10;
-
     // Build final answers map including current answer
     const finalAnswers: Record<string, { text: string; timeTaken: number }> = { ...answers };
     const currentQ = filteredQuestions[currentQuestionIndex];
@@ -319,20 +338,20 @@ function SessionsContent() {
       };
     }
 
-    // Validate that all answers meet minimum length requirement
+    // Validate that all answers meet minimum quality requirement
     const shortAnswers = filteredQuestions.filter(q => {
       const answerText = finalAnswers[q.id]?.text || "";
-      return answerText.trim().length < MIN_ANSWER_LENGTH;
+      return !isAnswerValid(answerText);
     });
 
     if (shortAnswers.length > 0) {
       toast.error(
-        `Please provide at least ${MIN_ANSWER_LENGTH} characters for each answer. ${shortAnswers.length} question(s) need more content.`
+        `Please provide meaningful answers (${MIN_ANSWER_WORDS}+ words and ${MIN_ANSWER_CHARACTERS}+ characters). ${shortAnswers.length} question(s) need more content.`
       );
       // Navigate to the first question with insufficient answer
       const firstShortIndex = filteredQuestions.findIndex(q => {
         const answerText = finalAnswers[q.id]?.text || "";
-        return answerText.trim().length < MIN_ANSWER_LENGTH;
+        return !isAnswerValid(answerText);
       });
       if (firstShortIndex >= 0) {
         setCurrentQuestionIndex(firstShortIndex);
@@ -388,7 +407,13 @@ function SessionsContent() {
       }
     } catch (error) {
       console.error("Error submitting answers:", error);
-      toast.error("Failed to evaluate answers");
+      if (error instanceof ApiClientError) {
+        const detail = error.data?.detail;
+        const message = typeof detail === "string" ? detail : "Failed to evaluate answers";
+        toast.error(message);
+      } else {
+        toast.error("Failed to evaluate answers");
+      }
     } finally {
       setIsSubmitting(false);
     }
