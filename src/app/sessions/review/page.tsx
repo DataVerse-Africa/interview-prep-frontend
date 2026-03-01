@@ -23,6 +23,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { sessionsApi, SessionEvaluations, SessionEvaluationDay, SessionEvaluationQuestion } from "@/lib/api/sessions";
 import { toast } from "sonner";
 
+const PASSING_SCORE_THRESHOLD = 50;
+
 function ReviewContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -251,10 +253,14 @@ function ReviewContent() {
                                         </CardHeader>
                                         <CardContent className="space-y-4">
                                             {dayData.questions.filter(q => q.is_answered).length > 0 ? (
-                                                dayData.questions.filter(q => q.is_answered).map((question, idx) => (
-                                                    <Card
+                                                dayData.questions.filter(q => q.is_answered).map((question, idx) => {
+                                                    const isPassing = typeof question.score === "number"
+                                                        ? question.score >= PASSING_SCORE_THRESHOLD
+                                                        : question.is_correct;
+                                                    return (
+                                                        <Card
                                                         key={question.question_id}
-                                                        className={`border-2 ${question.is_correct
+                                                        className={`border-2 ${isPassing
                                                             ? "border-green-200 bg-green-50/50 dark:border-green-900/50 dark:bg-green-950/20"
                                                             : "border-orange-200 bg-orange-50/50 dark:border-orange-900/50 dark:bg-orange-950/20"
                                                             }`}
@@ -275,8 +281,8 @@ function ReviewContent() {
                                                                     <span className="text-sm text-muted-foreground">Q{idx + 1}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
-                                                                    <Badge variant={question.is_correct ? "default" : "destructive"}>
-                                                                        {question.is_correct ? "Correct" : "Needs Improvement"}
+                                                                    <Badge variant={isPassing ? "default" : "destructive"}>
+                                                                        {isPassing ? "Correct" : "Needs Improvement"}
                                                                     </Badge>
                                                                     <span className="font-bold text-lg">
                                                                         {Math.round(question.score)}%
@@ -298,7 +304,7 @@ function ReviewContent() {
                                                             </div>
 
                                                             {/* Correct Answer (if different) */}
-                                                            {question.correct_answer && !question.is_correct && (
+                                                            {question.correct_answer && !isPassing && (
                                                                 <div className="bg-green-50/50 dark:bg-green-950/20 p-4 rounded-lg border border-green-200/50 dark:border-green-800/50">
                                                                     <p className="text-sm font-semibold text-green-700 dark:text-green-400 mb-2 flex items-center gap-2">
                                                                         <CheckCircle2 className="h-4 w-4" />
@@ -315,7 +321,7 @@ function ReviewContent() {
                                                             </div>
                                                         </CardContent>
                                                     </Card>
-                                                ))
+                                                )})
                                             ) : (
                                                 <p className="text-center text-muted-foreground py-8">
                                                     No answered questions for this day yet

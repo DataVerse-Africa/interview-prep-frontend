@@ -30,6 +30,7 @@ import ChatBox from "@/components/ChatBox";
 
 const MIN_ANSWER_CHARACTERS = 30;
 const MIN_ANSWER_WORDS = 10;
+const PASSING_SCORE_THRESHOLD = 50;
 const ANSWER_WORD_REGEX = /\b[\w'-]+\b/g;
 
 const getAnswerWordCount = (text: string): number => {
@@ -637,12 +638,15 @@ function SessionsContent() {
                     <div className="space-y-4">
                       {bucketEvaluation.question_evaluations.map((evalResult, idx) => {
                         const question = filteredQuestions.find(q => q.id === evalResult.question_id);
+                        const isPassing = typeof evalResult.score === "number"
+                          ? evalResult.score >= PASSING_SCORE_THRESHOLD
+                          : evalResult.is_correct;
                         return (
-                          <Card key={idx} className={`border ${evalResult.is_correct ? 'border-green-200 bg-green-50/50' : 'border-orange-200 bg-orange-50/50'}`}>
+                          <Card key={idx} className={`border ${isPassing ? 'border-green-200 bg-green-50/50' : 'border-orange-200 bg-orange-50/50'}`}>
                             <CardHeader className="pb-2">
                               <div className="flex justify-between items-start">
-                                <Badge variant={evalResult.is_correct ? "default" : "destructive"} className={evalResult.is_correct ? "bg-green-600 hover:bg-green-700" : ""}>
-                                  {evalResult.is_correct ? "Correct" : "Needs Improvement"}
+                                <Badge variant={isPassing ? "default" : "destructive"} className={isPassing ? "bg-green-600 hover:bg-green-700" : ""}>
+                                  {isPassing ? "Correct" : "Needs Improvement"}
                                 </Badge>
                                 <span className="font-bold text-lg">{Math.round(evalResult.score)}%</span>
                               </div>
