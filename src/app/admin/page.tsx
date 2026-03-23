@@ -88,6 +88,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUp, Database, Search as SearchIcon, Trash2, RefreshCw } from "lucide-react";
 
+const PASSING_SCORE_THRESHOLD = 50;
+
+const isPassingScore = (score?: number | null, storedIsCorrect?: boolean | null): boolean => {
+  if (typeof score === "number") {
+    return score >= PASSING_SCORE_THRESHOLD;
+  }
+  return Boolean(storedIsCorrect);
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<AdminSystemStats | null>(null);
@@ -1209,10 +1218,10 @@ export default function AdminPage() {
                                               {q.topic || "unknown"}
                                             </span>
                                             {typeof q.user_score === "number" ? (
-                                              <span>Score: {(q.user_score * 100).toFixed(1)}%</span>
+                                              <span>Score: {q.user_score.toFixed(1)}%</span>
                                             ) : null}
-                                            {typeof q.is_correct === "boolean" ? (
-                                              <span>{q.is_correct ? "Correct" : "Incorrect"}</span>
+                                            {(typeof q.user_score === "number" || typeof q.is_correct === "boolean") ? (
+                                              <span>{isPassingScore(q.user_score, q.is_correct) ? "Correct" : "Incorrect"}</span>
                                             ) : null}
                                           </div>
                                         </div>

@@ -89,7 +89,12 @@ function AlignmentContent() {
                 }
                 setAlignmentData(alignment);
             } catch (alignError) {
-                console.log("No alignment found, user can generate one");
+                if (alignError instanceof ApiClientError && alignError.status === 404) {
+                    console.log("No alignment found for this session yet");
+                    setAlignmentData(null);
+                } else {
+                    throw alignError;
+                }
             }
         } catch (error) {
             console.error("Error fetching data:", error);
@@ -108,11 +113,7 @@ function AlignmentContent() {
             toast.success("Alignment analysis complete!");
         } catch (error) {
             console.error("Error generating alignment:", error);
-            if (error instanceof ApiClientError) {
-                toast.error(error.data.message || "Failed to generate alignment");
-            } else {
-                toast.error("Failed to generate alignment analysis");
-            }
+            toast.error("Failed to generate alignment analysis");
         } finally {
             setIsGeneratingAlignment(false);
         }
@@ -136,11 +137,7 @@ function AlignmentContent() {
             setTimeout(() => router.push("/sessions"), 1000);
         } catch (error) {
             console.error("Error creating session:", error);
-            if (error instanceof ApiClientError) {
-                toast.error(error.data.message || "Failed to create session");
-            } else {
-                toast.error("Failed to generate questions");
-            }
+            toast.error("Failed to generate questions");
         } finally {
             setIsGenerating(false);
         }
