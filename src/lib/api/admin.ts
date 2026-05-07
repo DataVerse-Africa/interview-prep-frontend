@@ -201,6 +201,9 @@ export interface DocumentUploadResponse {
   topic?: string;
   tags?: string[];
   stored_path: string;
+  storage_path?: string | null;
+  checksum?: string | null;
+  already_indexed?: boolean;
 }
 
 export interface VectorDBStats {
@@ -220,6 +223,17 @@ export interface VectorDBQueryResult {
   source?: string;
   url?: string;
   title?: string;
+  filename?: string;
+  document_rank?: number;
+  chunk_rank?: number;
+}
+
+export interface StorageSyncResponse {
+  files_scanned: number;
+  files_indexed: number;
+  files_skipped: number;
+  chunks_indexed: number;
+  errors: Array<{ storage_path: string; error: string }>;
 }
 
 export interface UserSessionAnalytics {
@@ -439,12 +453,31 @@ export const adminApi = {
     return apiClient.get<VectorDBStats>('/api/admin/research/vectordb/stats');
   },
 
-  queryVectorDB: async (query: string, top_k: number = 10, role_filter?: string, topic_filter?: string): Promise<VectorDBQueryResult[]> => {
+  queryVectorDB: async (
+    query: string,
+    top_k: number = 15,
+    role_filter?: string,
+    topic_filter?: string
+  ): Promise<VectorDBQueryResult[]> => {
     return apiClient.post<VectorDBQueryResult[]>('/api/admin/research/vectordb/query', {
       query,
       top_k,
+      top_documents: 5,
+      chunks_per_document: 3,
       role_filter,
       topic_filter
+    });
+  },
+
+  syncStorageToVectorDB: async (
+    role_context?: string,
+    topic?: string,
+    force: boolean = false
+  ): Promise<StorageSyncResponse> => {
+    return apiClient.post<StorageSyncResponse>('/api/admin/research/storage/sync', {
+      role_context,
+      topic,
+      force,
     });
   },
 
