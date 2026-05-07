@@ -28,6 +28,16 @@ type OnboardingData = {
   preparationUnit: string;
 };
 
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof ApiClientError) {
+    const detail = error.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) return detail.map(item => item?.msg || JSON.stringify(item)).join("; ");
+    return error.data?.message || fallback;
+  }
+  return fallback;
+};
+
 function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -97,7 +107,7 @@ function OnboardingContent() {
           toast.success("Alignment analysis generated! Redirecting to dashboard...");
         } catch (alignmentError) {
           console.warn("Alignment generation failed, redirecting anyway:", alignmentError);
-          toast.info("Redirecting to dashboard...");
+          toast.warning(getApiErrorMessage(alignmentError, "Alignment analysis could not be generated yet."));
         }
 
         // Step 3: Pre-generate Day 1 questions in the background (fire and forget)
