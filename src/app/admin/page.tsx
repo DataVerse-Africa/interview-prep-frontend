@@ -129,6 +129,7 @@ export default function AdminPage() {
   const [researchQuery, setResearchQuery] = useState("");
   const [keywordForm, setKeywordForm] = useState({ keywords: "", role: "", topic: "" });
   const [uploadForm, setUploadForm] = useState({ file: null as File | null, role: "", topic: "", tags: "" });
+  const [syncForm, setSyncForm] = useState({ role: "Data, AI, ML, and Analytics", topic: "Interview Knowledge Base", force: false });
   const [isResearchLoading, setIsResearchLoading] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -301,7 +302,11 @@ export default function AdminPage() {
         uploadForm.topic,
         uploadForm.tags
       );
-      toast.success(`Indexed ${result.total_chunks_indexed} chunks from document`);
+      toast.success(
+        result.already_indexed
+          ? "Document already exists in storage and vector DB"
+          : `Indexed ${result.total_chunks_indexed} chunks from document`
+      );
       // Refresh stats
       const stats = await adminApi.getVectorDBStats();
       setVectorDBStats(stats);
@@ -309,6 +314,27 @@ export default function AdminPage() {
       setUploadForm({ file: null, role: "", topic: "", tags: "" });
     } catch (error: any) {
       toast.error(error.message || "File upload failed");
+    } finally {
+      setIsResearchLoading(false);
+    }
+  };
+
+  const handleStorageSync = async () => {
+    try {
+      setIsResearchLoading(true);
+      const result = await adminApi.syncStorageToVectorDB(
+        syncForm.role,
+        syncForm.topic,
+        syncForm.force
+      );
+      toast.success(`Synced ${result.files_indexed} files, indexed ${result.chunks_indexed} chunks`);
+      if (result.errors.length > 0) {
+        toast.warning(`${result.errors.length} files failed during sync`);
+      }
+      const stats = await adminApi.getVectorDBStats();
+      setVectorDBStats(stats);
+    } catch (error: any) {
+      toast.error(error.message || "Storage sync failed");
     } finally {
       setIsResearchLoading(false);
     }
@@ -1731,6 +1757,55 @@ export default function AdminPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <RefreshCw className="h-5 w-5 text-cyan-600" />
+                      Supabase Storage Sync
+                    </CardTitle>
+                    <CardDescription>
+                      Ingest missing corpus files from Supabase Storage into the local vector database.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Role Context</Label>
+                          <Input
+                            value={syncForm.role}
+                            onChange={(e) => setSyncForm({ ...syncForm, role: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Topic</Label>
+                          <Input
+                            value={syncForm.topic}
+                            onChange={(e) => setSyncForm({ ...syncForm, topic: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={syncForm.force}
+                          onChange={(e) => setSyncForm({ ...syncForm, force: e.target.checked })}
+                        />
+                        Re-index files already present in the local vector database
+                      </label>
+                      <Button
+                        onClick={handleStorageSync}
+                        disabled={isResearchLoading}
+                        variant="outline"
+                        className="w-full"
+                      >
+                        {isResearchLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                        Sync Storage to Vector DB
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
 
@@ -1766,10 +1841,13 @@ export default function AdminPage() {
                         <div key={idx} className="p-4 border rounded-lg bg-muted/30">
                           <div className="flex justify-between items-start mb-2">
                             <Badge variant="outline">{result.content_type || 'Unknown'}</Badge>
-                            <span className="text-sm font-mono text-muted-foreground">Score: {result.score.toFixed(4)}</span>
+                            <span className="text-sm font-mono text-muted-foreground">
+                              Doc {result.document_rank || '-'} / Chunk {result.chunk_rank || '-'} · Score: {result.score.toFixed(4)}
+                            </span>
                           </div>
                           <p className="text-sm mb-2">{result.content}</p>
                           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                            {result.filename && <span>File: {result.filename}</span>}
                             {result.role && <span>Role: {result.role}</span>}
                             {result.topic && <span>Topic: {result.topic}</span>}
                             {result.source && <span>Source: {result.source}</span>}
