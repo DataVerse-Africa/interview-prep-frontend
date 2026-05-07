@@ -101,12 +101,13 @@ function SessionsContent() {
       setCurrentAnswerText(answers[filtered[0]?.id]?.text || "");
       setBucketEvaluation(null); // Reset evaluation when difficulty changes
 
-      // Try to fetch existing evaluation for this bucket
+      // Only fetch existing evaluation when the backend summary says this bucket is complete.
+      // Unanswered buckets intentionally have no evaluation resource, so polling them creates noisy 404s.
       if (user?.user_id && selectedSession && filtered.length > 0) {
-        checkExistingEvaluation(filtered);
+        checkExistingEvaluation();
       }
     }
-  }, [questions, selectedDifficulty, selectedSession]);
+  }, [questions, selectedDifficulty, selectedSession, daySummaries, currentDay]);
 
   const fetchSessions = async () => {
     try {
@@ -249,12 +250,22 @@ function SessionsContent() {
     }
   };
 
-  const checkExistingEvaluation = async (currentFilteredQuestions: any[]) => {
+  const checkExistingEvaluation = async () => {
     if (!user?.user_id || !selectedSession) return;
 
+    const normalizedDifficulty = selectedDifficulty.toLowerCase();
+    const summary = getDaySummary(currentDay);
+    const completedForDifficulty = summary?.completed_difficulties
+      ?.map(d => d.toLowerCase())
+      .includes(normalizedDifficulty);
+    const hasAnsweredQuestionsForDifficulty = summary?.questions
+      ?.some(q => q.difficulty?.toLowerCase() === normalizedDifficulty && q.is_answered);
+
+    if (!completedForDifficulty && !hasAnsweredQuestionsForDifficulty) {
+      return;
+    }
+
     try {
-      // We only need to check if we have a bucket evaluation
-      // Assuming the API returns 404 or null if not evaluated
       const evalData = await evaluationsApi.getDifficultyBucketEvaluation(
         selectedSession.id,
         currentDay,
