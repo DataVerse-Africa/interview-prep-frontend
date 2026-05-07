@@ -49,6 +49,16 @@ const dimensionColors: Record<string, string> = {
     education: "from-indigo-500 to-blue-500",
 };
 
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof ApiClientError) {
+        const detail = error.data?.detail;
+        if (typeof detail === "string") return detail;
+        if (Array.isArray(detail)) return detail.map(item => item?.msg || JSON.stringify(item)).join("; ");
+        return error.data?.message || fallback;
+    }
+    return fallback;
+};
+
 function AlignmentContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -113,7 +123,7 @@ function AlignmentContent() {
             toast.success("Alignment analysis complete!");
         } catch (error) {
             console.error("Error generating alignment:", error);
-            toast.error("Failed to generate alignment analysis");
+            toast.error(getApiErrorMessage(error, "Failed to generate alignment analysis"));
         } finally {
             setIsGeneratingAlignment(false);
         }
