@@ -14,5 +14,5 @@ NEXT_PUBLIC_API_URL=http://localhost:10000
 Example (production):
 
 ```
-NEXT_PUBLIC_API_URL=https://interview-prep-api.dataverseafrica.org
+NEXT_PUBLIC_API_URL=https://interview-prep.dataverseafrica.org
 ```
