@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = 'https://interview-prep-api.dataverseafrica.org';
+const DEFAULT_API_URL = 'https://interview-prep.dataverseafrica.org';
 
 const normalizeBaseUrl = (value: string): string => {
   let normalized = value.trim();
